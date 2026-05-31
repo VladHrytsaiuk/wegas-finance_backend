@@ -34,6 +34,19 @@ type AccountInputJSON struct {
 
 }
 
+// Create godoc
+// @Summary Create a new account
+// @Description Creates a new financial account for the current user.
+// @Tags Accounts
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param body body AccountInputJSON true "Account details"
+// @Success 201 {object} models.Account
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /accounts [post]
 func (h *AccountController) Create(c *gin.Context) {
 	// 1. Отримуємо об'єкт юзера з контексту
 	currentUser, exists := c.Get("user")
@@ -74,6 +87,17 @@ func (h *AccountController) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, account)
 }
 
+// GetAll godoc
+// @Summary Get all accounts
+// @Description Returns a list of all accounts accessible to the current user.
+// @Tags Accounts
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {array} models.Account
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /accounts [get]
 func (h *AccountController) GetAll(c *gin.Context) {
 	currentUser, exists := c.Get("user")
 	if !exists {
@@ -92,6 +116,18 @@ func (h *AccountController) GetAll(c *gin.Context) {
 	c.JSON(http.StatusOK, accounts)
 }
 
+// GetOne godoc
+// @Summary Get account by ID
+// @Description Returns a single account by its ID.
+// @Tags Accounts
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Account ID"
+// @Success 200 {object} models.Account
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 404 {object} map[string]string "Account not found"
+// @Router /accounts/{id} [get]
 func (h *AccountController) GetOne(c *gin.Context) {
 	id := c.Param("id")
 	currentUser, exists := c.Get("user")
@@ -110,6 +146,20 @@ func (h *AccountController) GetOne(c *gin.Context) {
 	c.JSON(http.StatusOK, account)
 }
 
+// Update godoc
+// @Summary Update account
+// @Description Updates an existing account by its ID.
+// @Tags Accounts
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Account ID"
+// @Param body body AccountInputJSON true "Updated account details"
+// @Success 200 {object} models.Account
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /accounts/{id} [put]
 func (h *AccountController) Update(c *gin.Context) {
 	id := c.Param("id")
 	currentUser, exists := c.Get("user")
@@ -149,6 +199,18 @@ func (h *AccountController) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, account)
 }
 
+// Delete godoc
+// @Summary Delete account
+// @Description Deletes an account by its ID.
+// @Tags Accounts
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Account ID"
+// @Success 200 {object} map[string]string "Account deleted"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /accounts/{id} [delete]
 func (h *AccountController) Delete(c *gin.Context) {
 	id := c.Param("id")
 	currentUser, exists := c.Get("user")

@@ -16,6 +16,19 @@ func NewGoalController(service *services.GoalService) *GoalController {
 	return &GoalController{service: service}
 }
 
+// Create godoc
+// @Summary Create a new financial goal
+// @Description Creates a new financial goal for the family.
+// @Tags Goals
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param body body models.Goal true "Goal details"
+// @Success 201 {object} models.Goal
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /goals [post]
 func (c *GoalController) Create(ctx *gin.Context) {
 	var input models.Goal
 	if err := ctx.ShouldBindJSON(&input); err != nil {
@@ -35,6 +48,17 @@ func (c *GoalController) Create(ctx *gin.Context) {
 	ctx.JSON(http.StatusCreated, input)
 }
 
+// GetAll godoc
+// @Summary Get all goals
+// @Description Returns a list of all financial goals for the family.
+// @Tags Goals
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {array} models.Goal
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /goals [get]
 func (c *GoalController) GetAll(ctx *gin.Context) {
 	familyID, _ := ctx.Get("familyID")
 	userID := ctx.GetString("userID")
@@ -47,6 +71,19 @@ func (c *GoalController) GetAll(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, goals)
 }
 
+// GetOne godoc
+// @Summary Get goal by ID
+// @Description Returns a single financial goal by its ID.
+// @Tags Goals
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Goal ID"
+// @Success 200 {object} models.Goal
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 403 {object} map[string]string "Access denied"
+// @Failure 404 {object} map[string]string "Goal not found"
+// @Router /goals/{id} [get]
 func (c *GoalController) GetOne(ctx *gin.Context) {
 	id := ctx.Param("id")
 	userID := ctx.GetString("userID")
@@ -63,6 +100,21 @@ func (c *GoalController) GetOne(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, goal)
 }
 
+// Update godoc
+// @Summary Update goal
+// @Description Updates an existing financial goal by its ID.
+// @Tags Goals
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Goal ID"
+// @Param body body models.Goal true "Updated goal details"
+// @Success 200 {object} models.Goal
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 403 {object} map[string]string "Permission denied"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /goals/{id} [put]
 func (c *GoalController) Update(ctx *gin.Context) {
 	id := ctx.Param("id")
 	userID := ctx.GetString("userID")
@@ -85,6 +137,19 @@ func (c *GoalController) Update(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, input)
 }
 
+// Delete godoc
+// @Summary Delete goal
+// @Description Deletes a financial goal by its ID.
+// @Tags Goals
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Goal ID"
+// @Success 200 {object} map[string]string "Delete status"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 403 {object} map[string]string "Permission denied"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /goals/{id} [delete]
 func (c *GoalController) Delete(ctx *gin.Context) {
 	id := ctx.Param("id")
 	userID := ctx.GetString("userID")
@@ -100,6 +165,22 @@ func (c *GoalController) Delete(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"message": "Goal deleted"})
 }
 
+// UploadPhoto godoc
+// @Summary Upload goal photo
+// @Description Uploads a photo for a financial goal.
+// @Tags Goals
+// @Accept mpfd
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Goal ID"
+// @Param file formData file true "Photo file"
+// @Success 200 {object} map[string]string "Success status and photo URL"
+// @Failure 400 {object} map[string]string "No file uploaded"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 403 {object} map[string]string "Permission denied"
+// @Failure 404 {object} map[string]string "Goal not found"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /goals/{id}/photo [post]
 func (c *GoalController) UploadPhoto(ctx *gin.Context) {
 	goalID := ctx.Param("id")
 	userID := ctx.GetString("userID")
@@ -137,14 +218,28 @@ func (c *GoalController) UploadPhoto(ctx *gin.Context) {
 	})
 }
 
-// ... Link/Unlink methods ...
+type LinkAccountJSON struct {
+	AccountID string `json:"account_id" binding:"required"`
+}
 
+// LinkAccount godoc
+// @Summary Link account to goal
+// @Description Associates a financial account with a financial goal.
+// @Tags Goals
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Goal ID"
+// @Param body body LinkAccountJSON true "Account link details"
+// @Success 200 {object} map[string]string "Success status"
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /goals/{id}/link-account [post]
 func (c *GoalController) LinkAccount(ctx *gin.Context) {
 	goalID := ctx.Param("id")
 
-	var req struct {
-		AccountID string `json:"account_id" binding:"required"`
-	}
+	var req LinkAccountJSON
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -158,10 +253,22 @@ func (c *GoalController) LinkAccount(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"message": "Account linked successfully"})
 }
 
+// UnlinkAccount godoc
+// @Summary Unlink account from goal
+// @Description Removes the association between a financial account and any goal.
+// @Tags Goals
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Goal ID (unused, but kept for route symmetry)"
+// @Param body body LinkAccountJSON true "Account unlink details"
+// @Success 200 {object} map[string]string "Success status"
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /goals/{id}/unlink-account [post]
 func (c *GoalController) UnlinkAccount(ctx *gin.Context) {
-	var req struct {
-		AccountID string `json:"account_id" binding:"required"`
-	}
+	var req LinkAccountJSON
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

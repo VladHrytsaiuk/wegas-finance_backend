@@ -37,11 +37,22 @@ func (p *program) Stop(s service.Service) error {
 	return nil
 }
 
+// @title WeGaS Finance API
+// @version 1.0
+// @description API for WeGaS Finance application.
+// @contact.name Vlad Hrytsaiuk
+
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name Authorization
+
+// @BasePath /api
+
 func main() {
 
-	////////
+////////
 
-	// ex, err := os.Executable()
+// ex, err := os.Executable()
   // if err != nil {
   //   log.Fatal(err)
   // }
@@ -119,8 +130,6 @@ func startApp() {
 		&models.Asset{},
 		&models.AssetPhoto{}, 
 		&models.AssetDocument{},
-		&models.MedicalRecord{}, 
-		&models.MedicalFile{},
 		&models.UtilityMeter{}, 
 		&models.UtilityReading{}, 
 		&models.BankConnection{},
@@ -194,7 +203,6 @@ func startApp() {
 		Feedback: controllers.NewFeedbackController(feedbackService),
 		Shopping: controllers.NewShoppingController(shoppingService),
 		Wishlist:     controllers.NewWishlistController(wishlistService), // <--- 4. ДОДАНО КОНТРОЛЕР
-		
 	}
 
 	r := gin.Default()

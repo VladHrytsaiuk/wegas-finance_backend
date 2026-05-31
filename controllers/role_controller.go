@@ -23,6 +23,20 @@ type RoleInputJSON struct {
 	CanEditSchema  bool   `json:"can_edit_schema"`
 }
 
+// Create godoc
+// @Summary Create a new role
+// @Description Creates a new user role. Only accessible by family parents/admins.
+// @Tags Roles
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param body body RoleInputJSON true "Role details"
+// @Success 201 {object} models.Role
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 403 {object} map[string]string "Permission denied"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /roles [post]
 func (h *RoleController) Create(c *gin.Context) {
 	currentUser := c.MustGet("user").(*models.User)
 
@@ -52,6 +66,17 @@ func (h *RoleController) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, role)
 }
 
+// GetAll godoc
+// @Summary Get all roles
+// @Description Returns a list of all available roles.
+// @Tags Roles
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {array} models.Role
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /roles [get]
 func (h *RoleController) GetAll(c *gin.Context) {
 	// Читати ролі можуть усі (щоб фронтенд знав права)
 	roles, err := h.service.GetAll()
@@ -62,6 +87,19 @@ func (h *RoleController) GetAll(c *gin.Context) {
 	c.JSON(http.StatusOK, roles)
 }
 
+// Delete godoc
+// @Summary Delete role
+// @Description Deletes a role by its ID. Only accessible by family parents/admins.
+// @Tags Roles
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Role ID"
+// @Success 200 {object} map[string]string "Role deleted"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 403 {object} map[string]string "Permission denied"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /roles/{id} [delete]
 func (h *RoleController) Delete(c *gin.Context) {
 	currentUser := c.MustGet("user").(*models.User)
 

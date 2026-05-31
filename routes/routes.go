@@ -4,8 +4,11 @@ import (
 	"os"
 
 	"github.com/VladHrytsaiuk/wegas-finance/backend/controllers"
+	_ "github.com/VladHrytsaiuk/wegas-finance/backend/docs"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/middlewares"
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 // AppControllers — контейнер для всіх контролерів
@@ -44,6 +47,8 @@ func SetupRoutes(r *gin.Engine, c AppControllers, uploadsDir string, secretKey s
   // StaticFS краще працює з браузерами, ніж просто Static
   r.StaticFS("/uploads", gin.Dir("./uploads", true))
 	
+	// Swagger UI
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	api := r.Group("/api")
 	{

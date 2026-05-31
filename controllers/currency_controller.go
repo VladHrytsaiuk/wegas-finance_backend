@@ -15,7 +15,17 @@ func NewCurrencyController(service services.CurrencyService) *CurrencyController
 	return &CurrencyController{service: service}
 }
 
-// GetRates - Handler for GET /api/currencies
+// GetRates godoc
+// @Summary Get currency rates
+// @Description Returns the latest exchange rates for all supported currencies.
+// @Tags Currency
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {array} models.ExchangeRate
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /currencies [get]
 func (cc *CurrencyController) GetRates(c *gin.Context) {
 	rates, err := cc.service.GetAllRates()
 	if err != nil {

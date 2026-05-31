@@ -16,13 +16,33 @@ func NewUserController(service services.UserService) *UserController {
 	return &UserController{service: service}
 }
 
-// GetMe повертає дані поточного користувача
+// GetMe godoc
+// @Summary Get current user profile
+// @Description Returns the profile of the currently authenticated user.
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {object} models.User
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Router /users/me [get]
 func (h *UserController) GetMe(c *gin.Context) {
 	// Беремо з контексту, це найшвидший спосіб
 	user := c.MustGet("user").(*models.User)
 	c.JSON(http.StatusOK, user)
 }
 
+// GetFamilyMembers godoc
+// @Summary Get family members
+// @Description Returns a list of all members in the current user's family.
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {array} models.User
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /users [get]
 func (h *UserController) GetFamilyMembers(c *gin.Context) {
 	currentUser := c.MustGet("user").(*models.User)
 
@@ -41,6 +61,19 @@ type AddMemberJSON struct {
 	RoleID   string `json:"role_id"`
 }
 
+// AddMember godoc
+// @Summary Add a family member
+// @Description Adds a new user to the current user's family. Only accessible by family parents/admins.
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param body body AddMemberJSON true "Member details"
+// @Success 201 {object} models.User
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 403 {object} map[string]string "Permission denied"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Router /family/users [post]
 func (h *UserController) AddMember(c *gin.Context) {
 	currentUser := c.MustGet("user").(*models.User)
 
@@ -70,6 +103,19 @@ type UpdateProfileJSON struct {
 	Email string `json:"email"`
 }
 
+// UpdateProfile godoc
+// @Summary Update current user profile
+// @Description Updates the profile information for the currently authenticated user.
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param body body UpdateProfileJSON true "Updated profile details"
+// @Success 200 {object} models.User
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /users/me [put]
 func (h *UserController) UpdateProfile(c *gin.Context) {
 	currentUser := c.MustGet("user").(*models.User)
 
@@ -93,6 +139,18 @@ type ChangePwdJSON struct {
 	NewPassword string `json:"new_password" binding:"required,min=6"`
 }
 
+// ChangePassword godoc
+// @Summary Change current user password
+// @Description Changes the password for the currently authenticated user.
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param body body ChangePwdJSON true "Password details"
+// @Success 200 {object} map[string]string "Password updated"
+// @Failure 400 {object} map[string]string "Invalid input or old password"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Router /users/password [put]
 func (h *UserController) ChangePassword(c *gin.Context) {
 	currentUser := c.MustGet("user").(*models.User)
 
@@ -109,6 +167,19 @@ func (h *UserController) ChangePassword(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Password updated"})
 }
 
+// DeleteMember godoc
+// @Summary Delete a family member
+// @Description Deletes a family member. Only accessible by family parents/admins.
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "User ID"
+// @Success 200 {object} map[string]string "User deleted"
+// @Failure 400 {object} map[string]string "Invalid request"
+// @Failure 403 {object} map[string]string "Permission denied"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Router /users/{id} [delete]
 func (h *UserController) DeleteMember(c *gin.Context) {
 	currentUser := c.MustGet("user").(*models.User)
 	targetID := c.Param("id")
@@ -127,6 +198,20 @@ type UpdateUserJSON struct {
 	Password string `json:"password"`
 }
 
+// UpdateUser godoc
+// @Summary Update a family member
+// @Description Updates information for a specific family member. Only accessible by family parents/admins.
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "User ID"
+// @Param body body UpdateUserJSON true "Updated member details"
+// @Success 200 {object} models.User
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 403 {object} map[string]string "Permission denied"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Router /users/{id} [put]
 func (h *UserController) UpdateUser(c *gin.Context) {
 	currentUser := c.MustGet("user").(*models.User)
 	targetID := c.Param("id")

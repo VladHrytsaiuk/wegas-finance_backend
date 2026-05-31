@@ -27,6 +27,17 @@ type LoginJSON struct {
 	Password string `json:"password" binding:"required"`
 }
 
+// Register godoc
+// @Summary Register a new user
+// @Description Register a new user and create a family for them. Requires a valid invite code.
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param body body RegisterJSON true "Registration details"
+// @Success 201 {object} services.LoginResponse
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 403 {object} map[string]string "Invalid invite code"
+// @Router /users [post]
 func (h *AuthController) Register(c *gin.Context) {
 	var json RegisterJSON
 	if err := c.ShouldBindJSON(&json); err != nil {
@@ -54,6 +65,17 @@ func (h *AuthController) Register(c *gin.Context) {
 	c.JSON(http.StatusCreated, res)
 }
 
+// Login godoc
+// @Summary Login a user
+// @Description Authenticate a user and return a JWT token.
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param body body LoginJSON true "Login credentials"
+// @Success 200 {object} services.LoginResponse
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Invalid credentials"
+// @Router /login [post]
 func (h *AuthController) Login(c *gin.Context) {
 	var json LoginJSON
 	if err := c.ShouldBindJSON(&json); err != nil {

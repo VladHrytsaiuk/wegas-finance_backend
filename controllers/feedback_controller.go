@@ -17,13 +17,29 @@ func NewFeedbackController(service services.FeedbackService) *FeedbackController
 	return &FeedbackController{service: service}
 }
 
-// Структура не використовується при c.PostForm, але залишив для документації
+// FeedbackInput godoc
 type FeedbackInput struct {
-	Name    string `json:"name"`
-	Contact string `json:"contact"`
-	Message string `json:"message" binding:"required"`
+	Name     string `json:"name" form:"name"`
+	Contact  string `json:"contact" form:"contact"`
+	Message  string `json:"message" form:"message" binding:"required"`
+	Priority string `json:"priority" form:"priority"`
 }
 
+// Submit godoc
+// @Summary Submit feedback
+// @Description Submits user feedback with optional images. Sent to a Telegram bot.
+// @Tags Feedback
+// @Accept mpfd
+// @Produce json
+// @Param name formData string false "User name"
+// @Param contact formData string false "User contact info"
+// @Param message formData string true "Feedback message"
+// @Param priority formData string false "Priority level (low, medium, high)" default(medium)
+// @Param images formData file false "Optional images for feedback"
+// @Success 200 {object} map[string]string "Success message"
+// @Failure 400 {object} map[string]string "Message is required"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /feedback [post]
 func (h *FeedbackController) Submit(c *gin.Context) {
 	// 1. Зчитуємо Multipart форму, щоб отримати доступ і до полів, і до файлів
 	// 32 MB - ліміт пам'яті для парсингу форми

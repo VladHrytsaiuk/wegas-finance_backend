@@ -18,6 +18,20 @@ func NewCategoryController(service services.CategoryService) *CategoryController
 
 // --- HANDLERS ---
 
+// Create godoc
+// @Summary Create a new category
+// @Description Creates a new transaction category. Only accessible by family parents/admins.
+// @Tags Categories
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param body body services.CategoryInput true "Category details"
+// @Success 201 {object} models.Category
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 403 {object} map[string]string "Permission denied"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /categories [post]
 func (h *CategoryController) Create(c *gin.Context) {
 	// 1. Отримуємо юзера для перевірки прав
 	currentUser := c.MustGet("user").(*models.User)
@@ -42,6 +56,17 @@ func (h *CategoryController) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, category)
 }
 
+// GetAll godoc
+// @Summary Get all categories
+// @Description Returns a list of all transaction categories for the current family.
+// @Tags Categories
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {array} models.Category
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /categories [get]
 func (h *CategoryController) GetAll(c *gin.Context) {
 	currentUser := c.MustGet("user").(*models.User)
 
@@ -54,6 +79,21 @@ func (h *CategoryController) GetAll(c *gin.Context) {
 	c.JSON(http.StatusOK, categories)
 }
 
+// Update godoc
+// @Summary Update category
+// @Description Updates an existing category by its ID. Only accessible by family parents/admins.
+// @Tags Categories
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Category ID"
+// @Param body body services.CategoryInput true "Updated category details"
+// @Success 200 {object} models.Category
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 403 {object} map[string]string "Permission denied"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /categories/{id} [put]
 func (h *CategoryController) Update(c *gin.Context) {
 	id := c.Param("id")
 	currentUser := c.MustGet("user").(*models.User)
@@ -77,6 +117,19 @@ func (h *CategoryController) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, category)
 }
 
+// Delete godoc
+// @Summary Delete category
+// @Description Deletes a category by its ID. Only accessible by family parents/admins.
+// @Tags Categories
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Category ID"
+// @Success 200 {object} map[string]string "Category deleted"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 403 {object} map[string]string "Permission denied"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /categories/{id} [delete]
 func (h *CategoryController) Delete(c *gin.Context) {
 	id := c.Param("id")
 	currentUser := c.MustGet("user").(*models.User)
@@ -93,6 +146,18 @@ func (h *CategoryController) Delete(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Category deleted"})
 }
 
+// GetOne godoc
+// @Summary Get category by ID
+// @Description Returns a single category by its ID.
+// @Tags Categories
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Category ID"
+// @Success 200 {object} models.Category
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 404 {object} map[string]string "Category not found"
+// @Router /categories/{id} [get]
 func (h *CategoryController) GetOne(c *gin.Context) {
 	id := c.Param("id")
 	currentUser := c.MustGet("user").(*models.User)

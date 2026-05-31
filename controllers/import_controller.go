@@ -19,6 +19,7 @@ func NewImportController(service *services.ImportService) *ImportController {
 // @Tags Import
 // @Accept multipart/form-data
 // @Produce json
+// @Security ApiKeyAuth
 // @Param file formData file true "Bank statement PDF"
 // @Param account_id formData string true "Account ID to link transactions"
 // @Param bank_type formData string true "Type of bank (privatbank, monobank)"

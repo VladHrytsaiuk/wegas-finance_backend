@@ -35,6 +35,19 @@ type CounterpartyJSON struct {
 
 // === HANDLERS: CATEGORIES ===
 
+// CreateCategory godoc
+// @Summary Create a new counterparty category
+// @Description Creates a new category for counterparties.
+// @Tags Counterparties
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param body body CpCategoryJSON true "Category details"
+// @Success 201 {object} models.CounterpartyCategory
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /counterparty-categories [post]
 func (h *CounterpartyController) CreateCategory(c *gin.Context) {
 	currentUser := c.MustGet("user").(*models.User)
 
@@ -59,6 +72,17 @@ func (h *CounterpartyController) CreateCategory(c *gin.Context) {
 	c.JSON(http.StatusCreated, res)
 }
 
+// GetCategories godoc
+// @Summary Get all counterparty categories
+// @Description Returns a list of all counterparty categories for the family.
+// @Tags Counterparties
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {array} models.CounterpartyCategory
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /counterparty-categories [get]
 func (h *CounterpartyController) GetCategories(c *gin.Context) {
 	currentUser := c.MustGet("user").(*models.User)
 
@@ -70,6 +94,20 @@ func (h *CounterpartyController) GetCategories(c *gin.Context) {
 	c.JSON(http.StatusOK, list)
 }
 
+// UpdateCategory godoc
+// @Summary Update counterparty category
+// @Description Updates an existing counterparty category by its ID.
+// @Tags Counterparties
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Category ID"
+// @Param body body CpCategoryJSON true "Updated category details"
+// @Success 200 {object} models.CounterpartyCategory
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /counterparty-categories/{id} [put]
 func (h *CounterpartyController) UpdateCategory(c *gin.Context) {
 	id := c.Param("id")
 	currentUser := c.MustGet("user").(*models.User)
@@ -95,6 +133,18 @@ func (h *CounterpartyController) UpdateCategory(c *gin.Context) {
 	c.JSON(http.StatusOK, res)
 }
 
+// GetCategory godoc
+// @Summary Get counterparty category by ID
+// @Description Returns a single counterparty category by its ID.
+// @Tags Counterparties
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Category ID"
+// @Success 200 {object} models.CounterpartyCategory
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 404 {object} map[string]string "Category not found"
+// @Router /counterparty-categories/{id} [get]
 func (h *CounterpartyController) GetCategory(c *gin.Context) {
 	id := c.Param("id")
 	currentUser := c.MustGet("user").(*models.User)
@@ -109,6 +159,19 @@ func (h *CounterpartyController) GetCategory(c *gin.Context) {
 
 // === HANDLERS: COUNTERPARTIES ===
 
+// Create godoc
+// @Summary Create a new counterparty
+// @Description Creates a new counterparty.
+// @Tags Counterparties
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param body body CounterpartyJSON true "Counterparty details"
+// @Success 201 {object} models.Counterparty
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /counterparties [post]
 func (h *CounterpartyController) Create(c *gin.Context) {
 	currentUser := c.MustGet("user").(*models.User)
 
@@ -134,6 +197,17 @@ func (h *CounterpartyController) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, res)
 }
 
+// GetAll godoc
+// @Summary Get all counterparties
+// @Description Returns a list of all counterparties for the family.
+// @Tags Counterparties
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {array} models.Counterparty
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /counterparties [get]
 func (h *CounterpartyController) GetAll(c *gin.Context) {
 	currentUser := c.MustGet("user").(*models.User)
 
@@ -145,6 +219,20 @@ func (h *CounterpartyController) GetAll(c *gin.Context) {
 	c.JSON(http.StatusOK, list)
 }
 
+// Update godoc
+// @Summary Update counterparty
+// @Description Updates an existing counterparty by its ID.
+// @Tags Counterparties
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Counterparty ID"
+// @Param body body CounterpartyJSON true "Updated counterparty details"
+// @Success 200 {object} models.Counterparty
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /counterparties/{id} [put]
 func (h *CounterpartyController) Update(c *gin.Context) {
 	id := c.Param("id")
 	currentUser := c.MustGet("user").(*models.User)
@@ -171,6 +259,18 @@ func (h *CounterpartyController) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, res)
 }
 
+// Delete godoc
+// @Summary Delete counterparty
+// @Description Deletes a counterparty by its ID.
+// @Tags Counterparties
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Counterparty ID"
+// @Success 200 {object} map[string]string "Counterparty deleted"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /counterparties/{id} [delete]
 func (h *CounterpartyController) Delete(c *gin.Context) {
 	id := c.Param("id")
 	currentUser := c.MustGet("user").(*models.User)
@@ -182,6 +282,18 @@ func (h *CounterpartyController) Delete(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Counterparty deleted"})
 }
 
+// GetOne godoc
+// @Summary Get counterparty by ID
+// @Description Returns a single counterparty by its ID.
+// @Tags Counterparties
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Counterparty ID"
+// @Success 200 {object} models.Counterparty
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 404 {object} map[string]string "Counterparty not found"
+// @Router /counterparties/{id} [get]
 func (h *CounterpartyController) GetOne(c *gin.Context) {
 	id := c.Param("id")
 	currentUser := c.MustGet("user").(*models.User)

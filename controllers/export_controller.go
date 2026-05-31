@@ -18,7 +18,25 @@ func NewExportController(s services.ExportService) *ExportController {
 	return &ExportController{service: s}
 }
 
-// ExportTransactions обробляє запит на експорт
+// ExportTransactions godoc
+// @Summary Export transactions
+// @Description Returns a list of transactions based on filters, suitable for export (e.g., CSV/PDF generation on the frontend).
+// @Tags Export
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param from query int64 false "Start date (timestamp)"
+// @Param to query int64 false "End date (timestamp)"
+// @Param accountIds query string false "Comma-separated account IDs"
+// @Param categoryIds query string false "Comma-separated category IDs"
+// @Param userIds query string false "Comma-separated user IDs"
+// @Param counterpartyIds query string false "Comma-separated counterparty IDs"
+// @Param type query []string false "Transaction types"
+// @Success 200 {array} models.Transaction
+// @Failure 400 {object} map[string]string "Invalid parameters"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /export/transactions [get]
 func (c *ExportController) ExportTransactions(ctx *gin.Context) {
 	// 1. 🔥 Отримуємо повного юзера для перевірки прав (RoleID)
 	currentUser := ctx.MustGet("user").(*models.User)

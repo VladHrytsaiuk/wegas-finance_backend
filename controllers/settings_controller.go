@@ -22,7 +22,16 @@
 		Theme        string `json:"theme"`
 	}
 
-	// GET: /api/settings
+	// GetSettingsHTTP godoc
+	// @Summary Get user settings
+	// @Description Returns the settings for the current user.
+	// @Tags Settings
+	// @Accept json
+	// @Produce json
+	// @Security ApiKeyAuth
+	// @Success 200 {object} map[string]string "User settings"
+	// @Failure 401 {object} map[string]string "Unauthorized"
+	// @Router /settings [get]
 	func (c *SettingsController) GetSettingsHTTP(ctx *gin.Context) {
 		// 🔥 ОПТИМІЗАЦІЯ: Беремо готового юзера з контексту
 		// (AuthMiddleware вже зробив запит в БД за нас)
@@ -35,7 +44,19 @@
 		})
 	}
 
-	// POST: /api/settings
+	// SaveSettingsHTTP godoc
+	// @Summary Save user settings
+	// @Description Updates the settings for the current user.
+	// @Tags Settings
+	// @Accept json
+	// @Produce json
+	// @Security ApiKeyAuth
+	// @Param body body UpdateSettingsRequest true "Updated settings"
+	// @Success 200 {object} map[string]string "Success status"
+	// @Failure 400 {object} map[string]string "Invalid input"
+	// @Failure 401 {object} map[string]string "Unauthorized"
+	// @Failure 500 {object} map[string]string "Internal server error"
+	// @Router /settings [post]
 	func (c *SettingsController) SaveSettingsHTTP(ctx *gin.Context) {
 		currentUser := ctx.MustGet("user").(*models.User)
 

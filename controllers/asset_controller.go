@@ -16,7 +16,17 @@ func NewAssetController(s *services.AssetService) *AssetController {
   return &AssetController{service: s}
 }
 
-// GET /assets
+// GetAll godoc
+// @Summary Get all assets
+// @Description Returns a list of all assets for the current user.
+// @Tags Assets
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {array} models.Asset
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /assets [get]
 func (h *AssetController) GetAll(c *gin.Context) {
   user := c.MustGet("user").(*models.User)
   assets, err := h.service.GetAll(user)
@@ -27,7 +37,19 @@ func (h *AssetController) GetAll(c *gin.Context) {
   c.JSON(http.StatusOK, assets)
 }
 
-// POST /assets
+// Create godoc
+// @Summary Create a new asset
+// @Description Creates a new asset (property, vehicle, etc.).
+// @Tags Assets
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param body body models.Asset true "Asset details"
+// @Success 201 {object} map[string]string "Created asset ID"
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /assets [post]
 func (h *AssetController) Create(c *gin.Context) {
   user := c.MustGet("user").(*models.User)
   
@@ -45,7 +67,18 @@ func (h *AssetController) Create(c *gin.Context) {
   c.JSON(http.StatusCreated, gin.H{"id": id})
 }
 
-// GET /assets/:id
+// GetOne godoc
+// @Summary Get asset by ID
+// @Description Returns a single asset by its ID.
+// @Tags Assets
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Asset ID"
+// @Success 200 {object} models.Asset
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 404 {object} map[string]string "Asset not found"
+// @Router /assets/{id} [get]
 func (h *AssetController) GetOne(c *gin.Context) {
   user := c.MustGet("user").(*models.User)
   id := c.Param("id")
@@ -57,7 +90,20 @@ func (h *AssetController) GetOne(c *gin.Context) {
   c.JSON(http.StatusOK, asset)
 }
 
-// PUT /assets/:id
+// Update godoc
+// @Summary Update asset
+// @Description Updates an existing asset by its ID.
+// @Tags Assets
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Asset ID"
+// @Param body body models.Asset true "Updated asset details"
+// @Success 200 {object} map[string]string "Update status"
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /assets/{id} [put]
 func (h *AssetController) Update(c *gin.Context) {
   id := c.Param("id")
   user := c.MustGet("user").(*models.User)
@@ -75,13 +121,29 @@ func (h *AssetController) Update(c *gin.Context) {
   c.JSON(http.StatusOK, gin.H{"status": "updated"})
 }
 
+type UpdateMileageJSON struct {
+	Mileage int `json:"mileage" binding:"required"`
+}
+
+// UpdateMileage godoc
+// @Summary Update vehicle mileage
+// @Description Updates the mileage for a vehicle asset.
+// @Tags Assets
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Asset ID"
+// @Param body body UpdateMileageJSON true "Mileage details"
+// @Success 200 {object} map[string]string "Update status"
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /assets/{id}/mileage [patch]
 func (h *AssetController) UpdateMileage(c *gin.Context) {
   id := c.Param("id")
   user := c.MustGet("user").(*models.User)
 
-  var input struct {
-    Mileage int `json:"mileage" binding:"required"`
-  }
+  var input UpdateMileageJSON
   
   if err := c.ShouldBindJSON(&input); err != nil {
     c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -95,7 +157,18 @@ func (h *AssetController) UpdateMileage(c *gin.Context) {
   c.JSON(http.StatusOK, gin.H{"status": "mileage updated"})
 }
 
-// DELETE /assets/:id
+// Delete godoc
+// @Summary Delete asset
+// @Description Deletes an asset by its ID.
+// @Tags Assets
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Asset ID"
+// @Success 200 {object} map[string]string "Delete status"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /assets/{id} [delete]
 func (h *AssetController) Delete(c *gin.Context) {
   user := c.MustGet("user").(*models.User)
   id := c.Param("id")
@@ -106,7 +179,20 @@ func (h *AssetController) Delete(c *gin.Context) {
   c.JSON(http.StatusOK, gin.H{"status": "deleted"})
 }
 
-// POST /assets/:id/photo
+// UploadPhoto godoc
+// @Summary Upload asset photo
+// @Description Uploads a photo for an asset.
+// @Tags Assets
+// @Accept mpfd
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Asset ID"
+// @Param file formData file true "Photo file"
+// @Success 200 {object} map[string]string "Path to the uploaded photo"
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /assets/{id}/photo [post]
 func (h *AssetController) UploadPhoto(c *gin.Context) {
   user := c.MustGet("user").(*models.User)
   id := c.Param("id")
@@ -123,7 +209,20 @@ func (h *AssetController) UploadPhoto(c *gin.Context) {
   c.JSON(http.StatusOK, gin.H{"path": path})
 }
 
-// DELETE /assets/:id/photo
+// RemovePhoto godoc
+// @Summary Remove asset photo
+// @Description Removes a specific photo from an asset.
+// @Tags Assets
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Asset ID"
+// @Param path query string true "Path of the photo to remove"
+// @Success 200 {object} map[string]string "Delete status"
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /assets/{id}/photo [delete]
 func (h *AssetController) RemovePhoto(c *gin.Context) {
   id := c.Param("id")
   user := c.MustGet("user").(*models.User)
@@ -141,7 +240,20 @@ func (h *AssetController) RemovePhoto(c *gin.Context) {
   c.JSON(http.StatusOK, gin.H{"status": "photo deleted"})
 }
 
-// 🔥 POST /assets/:id/documents
+// UploadDocument godoc
+// @Summary Upload asset document
+// @Description Uploads a document file for an asset.
+// @Tags Assets
+// @Accept mpfd
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Asset ID"
+// @Param file formData file true "Document file"
+// @Success 200 {object} models.AssetDocument
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /assets/{id}/documents [post]
 func (h *AssetController) UploadDocument(c *gin.Context) {
   user := c.MustGet("user").(*models.User)
   id := c.Param("id")
@@ -160,7 +272,19 @@ func (h *AssetController) UploadDocument(c *gin.Context) {
   c.JSON(http.StatusOK, doc) // Повертаємо об'єкт документа, щоб фронтенд відразу міг його відрендерити
 }
 
-// 🔥 DELETE /assets/:id/documents/:doc_id
+// RemoveDocument godoc
+// @Summary Remove asset document
+// @Description Removes a specific document from an asset.
+// @Tags Assets
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Asset ID"
+// @Param doc_id path string true "Document ID"
+// @Success 200 {object} map[string]string "Delete status"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /assets/{id}/documents/{doc_id} [delete]
 func (h *AssetController) RemoveDocument(c *gin.Context) {
   id := c.Param("id")
   docID := c.Param("doc_id")

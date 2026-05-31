@@ -33,7 +33,20 @@ func parseAccountIDs(ctx *gin.Context) []string {
 	return []string{}
 }
 
-// 1. Головна статистика
+// GetStats godoc
+// @Summary Get dashboard statistics
+// @Description Returns main dashboard statistics like total balance, total income, and total expenses.
+// @Tags Dashboard
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param from query int64 false "Start date (timestamp)"
+// @Param to query int64 false "End date (timestamp)"
+// @Param account_ids query string false "Comma-separated account IDs"
+// @Success 200 {object} services.DashboardData
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /dashboard/stats [get]
 func (c *DashboardController) GetStats(ctx *gin.Context) {
 	currentUser := ctx.MustGet("user").(*models.User)
 
@@ -53,7 +66,23 @@ func (c *DashboardController) GetStats(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, stats)
 }
 
-// 2. ТОП-и
+// GetTopStats godoc
+// @Summary Get top statistics
+// @Description Returns top entities (categories or counterparties) for income or expenses.
+// @Tags Dashboard
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param type query string true "Flow type (income, expense)"
+// @Param entity query string true "Entity type (category, counterparty)"
+// @Param from query int64 false "Start date (timestamp)"
+// @Param to query int64 false "End date (timestamp)"
+// @Param account_ids query string false "Comma-separated account IDs"
+// @Success 200 {array} repositories.TopStat
+// @Failure 400 {object} map[string]string "Missing params"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /dashboard/top [get]
 func (c *DashboardController) GetTopStats(ctx *gin.Context) {
 	currentUser := ctx.MustGet("user").(*models.User)
 
@@ -81,7 +110,22 @@ func (c *DashboardController) GetTopStats(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, result)
 }
 
-// 3. Тренд
+// GetTrend godoc
+// @Summary Get financial trend
+// @Description Returns daily aggregated income or expense trend over a period.
+// @Tags Dashboard
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param type query string true "Flow type (income, expense)"
+// @Param currency query string false "Override target currency"
+// @Param from query int64 false "Start date (timestamp)"
+// @Param to query int64 false "End date (timestamp)"
+// @Param account_ids query string false "Comma-separated account IDs"
+// @Success 200 {array} repositories.TrendStat
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /dashboard/trend [get]
 func (c *DashboardController) GetTrend(ctx *gin.Context) {
 	currentUser := ctx.MustGet("user").(*models.User)
 	flowType := ctx.Query("type")
@@ -111,7 +155,18 @@ func (c *DashboardController) GetTrend(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, trend)
 }
 
-// 4. Останні транзакції
+// GetRecent godoc
+// @Summary Get recent transactions
+// @Description Returns the most recent transactions for the dashboard.
+// @Tags Dashboard
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param account_ids query string false "Comma-separated account IDs"
+// @Success 200 {array} models.Transaction
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /dashboard/recent [get]
 func (c *DashboardController) GetRecent(ctx *gin.Context) {
 	currentUser := ctx.MustGet("user").(*models.User)
 	accountIDs := parseAccountIDs(ctx)
