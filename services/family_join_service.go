@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
@@ -123,20 +124,102 @@ func (s *familyJoinService) JoinFamily(userID string, code string) (*models.Fami
 			}
 		}
 
-		// Б) Таблиці без user_id (мігруємо все, що належало старій персональній сім'ї)
+		// Б) Таблиці без user_id з дедуплікацією (мігруємо все, що належало старій персональній сім'ї)
 		if oldFamilyID != "" {
-			tablesWithFamilyIDOnly := []string{
-				"counterparties",
-				"counterparty_categories",
-				"tags",
-				"utility_meters",
-				"categories",
-			}
-			for _, table := range tablesWithFamilyIDOnly {
-				if err := tx.Table(table).Where("family_id = ?", oldFamilyID).Update("family_id", joinCode.FamilyID).Error; err != nil {
-					return err
+			// 1. Дедуплікація Категорій Транзакцій
+			var oldCategories []models.Category
+			if err := tx.Where("family_id = ? AND deleted_at IS NULL", oldFamilyID).Find(&oldCategories).Error; err == nil {
+				for _, oldCat := range oldCategories {
+					var existingCat models.Category
+					// Шукаємо таку саму категорію (тип + назва) в новій сім'ї (Кирилиця-friendly)
+					err := tx.Where("family_id = ? AND type = ? AND (name = ? OR name = ? OR name = ?)",
+						joinCode.FamilyID, oldCat.Type, oldCat.Name, strings.ToLower(oldCat.Name), strings.ToUpper(oldCat.Name)).
+						Where("deleted_at IS NULL").First(&existingCat).Error
+
+					if err == nil {
+						// Знайшли дублікат - переприв'язуємо транзакції та елементи чеків
+						tx.Table("transactions").Where("category_id = ?", oldCat.ID).Update("category_id", existingCat.ID)
+						tx.Table("transaction_items").Where("category_id = ?", oldCat.ID).Update("category_id", existingCat.ID)
+						tx.Delete(&oldCat)
+					} else {
+						// Не знайшли - просто переносимо
+						tx.Model(&oldCat).Update("family_id", joinCode.FamilyID)
+					}
 				}
 			}
+
+			// 2. Дедуплікація Категорій Контрагентів
+			var oldCPCats []models.CounterpartyCategory
+			if err := tx.Where("family_id = ? AND deleted_at IS NULL", oldFamilyID).Find(&oldCPCats).Error; err == nil {
+				for _, oldCPCat := range oldCPCats {
+					var existingCPCat models.CounterpartyCategory
+					err := tx.Where("family_id = ? AND (name = ? OR name = ? OR name = ?)",
+						joinCode.FamilyID, oldCPCat.Name, strings.ToLower(oldCPCat.Name), strings.ToUpper(oldCPCat.Name)).
+						Where("deleted_at IS NULL").First(&existingCPCat).Error
+
+					if err == nil {
+						tx.Table("counterparties").Where("category_id = ?", oldCPCat.ID).Update("category_id", existingCPCat.ID)
+						tx.Delete(&oldCPCat)
+					} else {
+						tx.Model(&oldCPCat).Update("family_id", joinCode.FamilyID)
+					}
+				}
+			}
+
+			// 3. Дедуплікація Контрагентів
+			var oldCPs []models.Counterparty
+			if err := tx.Where("family_id = ? AND deleted_at IS NULL", oldFamilyID).Find(&oldCPs).Error; err == nil {
+				for _, oldCP := range oldCPs {
+					var existingCP models.Counterparty
+					err := tx.Where("family_id = ? AND (name = ? OR name = ? OR name = ?)",
+						joinCode.FamilyID, oldCP.Name, strings.ToLower(oldCP.Name), strings.ToUpper(oldCP.Name)).
+						Where("deleted_at IS NULL").First(&existingCP).Error
+
+					if err == nil {
+						// Переприв'язуємо
+						tx.Table("transactions").Where("counterparty_id = ?", oldCP.ID).Update("counterparty_id", existingCP.ID)
+						tx.Table("utility_meters").Where("counterparty_id = ?", oldCP.ID).Update("counterparty_id", existingCP.ID)
+
+						// Мержимо баланси (борги)
+						var oldBalances []models.CounterpartyBalance
+						if err := tx.Where("counterparty_id = ?", oldCP.ID).Find(&oldBalances).Error; err == nil {
+							for _, b := range oldBalances {
+								var exBalance models.CounterpartyBalance
+								if err := tx.Where("counterparty_id = ? AND currency = ?", existingCP.ID, b.Currency).First(&exBalance).Error; err == nil {
+									tx.Model(&exBalance).Update("balance", gorm.Expr("balance + ?", b.Balance))
+									tx.Delete(&b)
+								} else {
+									tx.Model(&b).Update("counterparty_id", existingCP.ID)
+								}
+							}
+						}
+						tx.Delete(&oldCP)
+					} else {
+						tx.Model(&oldCP).Update("family_id", joinCode.FamilyID)
+					}
+				}
+			}
+
+			// 4. Дедуплікація Тегів
+			var oldTags []models.Tag
+			if err := tx.Where("family_id = ? AND deleted_at IS NULL", oldFamilyID).Find(&oldTags).Error; err == nil {
+				for _, oldTag := range oldTags {
+					var existingTag models.Tag
+					err := tx.Where("family_id = ? AND (name = ? OR name = ? OR name = ?)",
+						joinCode.FamilyID, oldTag.Name, strings.ToLower(oldTag.Name), strings.ToUpper(oldTag.Name)).
+						Where("deleted_at IS NULL").First(&existingTag).Error
+
+					if err == nil {
+						tx.Table("transaction_tags").Where("tag_id = ?", oldTag.ID).Update("tag_id", existingTag.ID)
+						tx.Delete(&oldTag)
+					} else {
+						tx.Model(&oldTag).Update("family_id", joinCode.FamilyID)
+					}
+				}
+			}
+
+			// 5. Решта (Utility Meters) - просто переносимо
+			tx.Table("utility_meters").Where("family_id = ?", oldFamilyID).Update("family_id", joinCode.FamilyID)
 
 			// 3. Видаляємо стару порожню сім'ю
 			if err := tx.Where("id = ?", oldFamilyID).Delete(&models.Family{}).Error; err != nil {
