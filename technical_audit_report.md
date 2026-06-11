@@ -94,6 +94,6 @@ type StorageService interface {
 | [x] | **Local-First** 🏗️ | `models.Base` | Додати поля `ServerVersion` та `ClientUpdatedAt`. |
 | [x] | **Scalability** 📈 | `Monobank` | Реалізувати Webhook ендпоінт для Monobank. |
 | [x] | **Scalability** 📈 | `Monobank` | Оптимізувати `time.Sleep` у фоновій синхронізації (використати чергу або лімітер). |
-| [ ] | **Testing** 🧪 | `Global` | Запровадити `Clock` інтерфейс для роботи з часом. |
+| [x] | **Testing** 🧪 | `Global` | Запровадити `Clock` інтерфейс для роботи з часом. |
 
 **Вердикт:** Проєкт має здорову архітектуру для MVP, але потребує "гігієнічного" рефакторингу перед впровадженням Local-First, щоб уникнути хаосу при вирішенні конфліктів даних.

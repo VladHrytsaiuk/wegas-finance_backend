@@ -4,10 +4,10 @@ import (
 	"errors"
 	"mime/multipart"
 	"strings"
-	"time"
 
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/repositories"
+	"github.com/VladHrytsaiuk/wegas-finance/backend/utils"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -70,6 +70,7 @@ type txService struct {
 	cpRepo    repositories.CounterpartyRepository
 	assetRepo repositories.AssetRepository
 	storage   StorageService
+	clock     utils.Clock
 }
 
 func NewTransactionService(
@@ -78,6 +79,7 @@ func NewTransactionService(
 	cpRepo repositories.CounterpartyRepository,
 	assetRepo repositories.AssetRepository,
 	storage StorageService,
+	clock utils.Clock,
 ) TransactionService {
 	return &txService{
 		db:        db,
@@ -85,10 +87,11 @@ func NewTransactionService(
 		cpRepo:    cpRepo,
 		assetRepo: assetRepo,
 		storage:   storage,
+		clock:     clock,
 	}
 }
 func (s *txService) Create(input CreateTransactionInput, files []*multipart.FileHeader, user *models.User) (string, error) {
-	now := time.Now().UnixMilli()
+	now := s.clock.NowUnixMilli()
 	userID := user.ID
 
 	// === ЛОГІКА ПЕРЕКАЗУ ===
@@ -414,7 +417,7 @@ func (s *txService) DeletePhoto(photoID string, user *models.User) error {
 
 func (s *txService) BatchCreate(inputs []CreateTransactionInput, user *models.User) (int, error) {
 	var txs []models.Transaction
-	now := time.Now().UnixMilli()
+	now := s.clock.NowUnixMilli()
 	cpCache := make(map[string]string)
 
 	for _, input := range inputs {

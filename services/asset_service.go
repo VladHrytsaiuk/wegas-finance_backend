@@ -5,10 +5,10 @@ import (
 	"mime/multipart"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/repositories"
+	"github.com/VladHrytsaiuk/wegas-finance/backend/utils"
 	"github.com/google/uuid"
 )
 
@@ -16,6 +16,7 @@ type AssetService struct {
 	repo    repositories.AssetRepository
 	txRepo  repositories.TransactionRepository
 	storage StorageService
+	clock   utils.Clock
 }
 
 // Допоміжні структури для статистики
@@ -31,14 +32,14 @@ type AssetWithStats struct {
 	Stats AssetStats `json:"stats"`
 }
 
-func NewAssetService(repo repositories.AssetRepository, txRepo repositories.TransactionRepository, storage StorageService) *AssetService {
-	return &AssetService{repo: repo, txRepo: txRepo, storage: storage}
+func NewAssetService(repo repositories.AssetRepository, txRepo repositories.TransactionRepository, storage StorageService, clock utils.Clock) *AssetService {
+	return &AssetService{repo: repo, txRepo: txRepo, storage: storage, clock: clock}
 }
 
 func (s *AssetService) Create(input models.Asset, user *models.User) (string, error) {
 	input.ID = uuid.NewString()
 	input.FamilyID = user.FamilyID
-	input.CreatedAt = time.Now().UnixMilli()
+	input.CreatedAt = s.clock.NowUnixMilli()
 	input.UserID = user.ID
 
 	if input.Type == "car" {
@@ -117,7 +118,7 @@ func (s *AssetService) Update(id string, input models.Asset, user *models.User) 
 	existing.Address = input.Address
 	existing.Area = input.Area
 	existing.CadastralNum = input.CadastralNum
-	existing.UpdatedAt = time.Now().UnixMilli()
+	existing.UpdatedAt = s.clock.NowUnixMilli()
 
 	return s.repo.Update(existing)
 }
@@ -128,7 +129,7 @@ func (s *AssetService) UpdateMileage(id string, newMileage int, user *models.Use
 		return err
 	}
 	existing.Mileage = newMileage
-	existing.UpdatedAt = time.Now().UnixMilli()
+	existing.UpdatedAt = s.clock.NowUnixMilli()
 	return s.repo.Update(existing)
 }
 
@@ -148,7 +149,7 @@ func (s *AssetService) UploadPhoto(assetID string, file multipart.File, header *
 	}
 
 	galleryPhoto := &models.AssetPhoto{
-		Base:    models.Base{ID: uuid.NewString(), CreatedAt: time.Now().UnixMilli(), UpdatedAt: time.Now().UnixMilli()},
+		Base:    models.Base{ID: uuid.NewString(), CreatedAt: s.clock.NowUnixMilli(), UpdatedAt: s.clock.NowUnixMilli()},
 		AssetID: assetID,
 		Path:    path,
 	}
@@ -203,8 +204,8 @@ func (s *AssetService) UploadDocument(assetID string, file multipart.File, heade
 	doc := &models.AssetDocument{
 		Base: models.Base{
 			ID:        uuid.NewString(),
-			CreatedAt: time.Now().UnixMilli(),
-			UpdatedAt: time.Now().UnixMilli(),
+			CreatedAt: s.clock.NowUnixMilli(),
+			UpdatedAt: s.clock.NowUnixMilli(),
 		},
 		AssetID:  assetID,
 		Name:     header.Filename, // Оригінальна назва файлу, яку побачить користувач
@@ -252,7 +253,7 @@ func (s *AssetService) CalculateDepreciation(a *models.Asset) int64 {
 		return a.CurrentPrice
 	}
 
-	now := time.Now().UnixMilli()
+	now := s.clock.NowUnixMilli()
 	ageInYears := float64(now-a.PurchaseDate) / (1000 * 60 * 60 * 24 * 365.25)
 
 	life := 5.0

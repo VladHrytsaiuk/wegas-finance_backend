@@ -85,6 +85,7 @@ type MonobankService struct {
 	db          *gorm.DB
 	txService   TransactionService
 	accountRepo repositories.AccountRepository
+	clock       utils.Clock
 	
 	// Per-user sync status
 	mu      sync.RWMutex
@@ -95,11 +96,12 @@ type MonobankService struct {
 	lastRequestMap map[string]time.Time
 }
 
-func NewMonobankService(db *gorm.DB, txService TransactionService, accountRepo repositories.AccountRepository) *MonobankService {
+func NewMonobankService(db *gorm.DB, txService TransactionService, accountRepo repositories.AccountRepository, clock utils.Clock) *MonobankService {
 	return &MonobankService{
 		db:             db,
 		txService:      txService,
 		accountRepo:    accountRepo,
+		clock:          clock,
 		syncMap:        make(map[string]SyncStatus),
 		lastRequestMap: make(map[string]time.Time),
 	}
@@ -112,11 +114,11 @@ func (s *MonobankService) waitForMonobankLimit(token string) {
 
 	lastReq, exists := s.lastRequestMap[token]
 	if !exists {
-		s.lastRequestMap[token] = time.Now()
+		s.lastRequestMap[token] = s.clock.Now()
 		return
 	}
 
-	elapsed := time.Since(lastReq)
+	elapsed := s.clock.Now().Sub(lastReq)
 	waitTime := 61*time.Second - elapsed
 
 	if waitTime > 0 {
@@ -124,7 +126,7 @@ func (s *MonobankService) waitForMonobankLimit(token string) {
 		time.Sleep(waitTime)
 	}
 
-	s.lastRequestMap[token] = time.Now()
+	s.lastRequestMap[token] = s.clock.Now()
 }
 
 func (s *MonobankService) GetSyncStatus(userID string) SyncStatus {
@@ -158,7 +160,7 @@ func (s *MonobankService) Connect(userID, familyID, rawToken string) ([]MonoAcco
 	var conn models.BankConnection
 	result := s.db.Where("user_id = ? AND provider = 'monobank'", userID).First(&conn)
 
-	now := time.Now()
+	now := s.clock.Now()
 	conn.UserID = userID
 	conn.FamilyID = familyID
 	conn.Provider = "monobank"
@@ -309,8 +311,8 @@ func (s *MonobankService) SaveSettings(userID, familyID string, accounts []model
 			newAccount := &models.Account{
 				Base: models.Base{
 					ID:        newAccountID,
-					CreatedAt: time.Now().UnixMilli(),
-					UpdatedAt: time.Now().UnixMilli(),
+					CreatedAt: s.clock.NowUnixMilli(),
+					UpdatedAt: s.clock.NowUnixMilli(),
 					IsSynced:  true,
 				},
 				UserID:         userID,
@@ -340,15 +342,15 @@ func (s *MonobankService) SaveSettings(userID, familyID string, accounts []model
 					newGoal := models.Goal{
 						Base: models.Base{
 							ID:        uuid.NewString(),
-							CreatedAt: time.Now().UnixMilli(),
-							UpdatedAt: time.Now().UnixMilli(),
+							CreatedAt: s.clock.NowUnixMilli(),
+							UpdatedAt: s.clock.NowUnixMilli(),
 						},
 						FamilyID:     familyID,
 						Name:         mapping.Name,
 						Description:  "Імпортовано з Monobank",
 						TargetAmount: creditLimit, // 🔥 ВИКОРИСТОВУЄМО creditLimit ЯК ЦІЛЬ
 						Currency:     mapping.Currency,
-						DateStart:    time.Now().UnixMilli(),
+						DateStart:    s.clock.NowUnixMilli(),
 						Color:        "#ea5353",
 						Icon:         "HiSortAscending",
 						Status:       "active",
@@ -398,7 +400,7 @@ func (s *MonobankService) getOrCreateSystemStorageType(familyID, name, slug stri
 	newSt := models.StorageType{
 		Base: models.Base{
 			ID:        uuid.NewString(),
-			CreatedAt: time.Now().UnixMilli(),
+			CreatedAt: s.clock.NowUnixMilli(),
 		},
 		FamilyID: &familyID,
 		Name:     name,
@@ -509,7 +511,7 @@ func (s *MonobankService) Sync(userID string, targetAccountID string) (int, erro
 			}
 		}
 
-		now := time.Now()
+		now := s.clock.Now()
 
 		fmt.Printf("📆 Account [%s]: Start Date determined by [%s] -> %s\n", mapping.Name, logReason, startTime.Format("2006-01-02 15:04:05"))
 
@@ -644,7 +646,7 @@ func (s *MonobankService) Sync(userID string, targetAccountID string) (int, erro
 		}
 	}
 
-	nowTime := time.Now()
+	nowTime := s.clock.Now()
 	s.db.Model(&conn).Update("last_sync", nowTime)
 
 	fmt.Printf("✅ SYNC FINISHED. Total imported: %d\n", totalImported)
