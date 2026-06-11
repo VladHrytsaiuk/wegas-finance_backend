@@ -292,7 +292,8 @@ func (ctrl *MonobankController) Disconnect(c *gin.Context) {
 // @Failure 401 {object} map[string]string "Unauthorized"
 // @Router /monobank/status [get]
 func (ctrl *MonobankController) GetStatus(c *gin.Context) {
-	status := ctrl.service.GetSyncStatus()
+	userID := c.GetString("userID")
+	status := ctrl.service.GetSyncStatus(userID)
 	c.JSON(http.StatusOK, status)
 }
 

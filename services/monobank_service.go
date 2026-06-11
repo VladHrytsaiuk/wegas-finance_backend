@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
@@ -64,12 +65,6 @@ type SyncStatus struct {
 	TotalImported int    `json:"total_imported"`
 }
 
-var currentSyncStatus = SyncStatus{
-	IsRunning:     false,
-	Message:       "Очікування...",
-	TotalImported: 0,
-}
-
 type RawDataPayload struct {
 	MaskedPan []string `json:"maskedPan"`
 	Type      string   `json:"type"`
@@ -81,14 +76,35 @@ type MonobankService struct {
 	db          *gorm.DB
 	txService   TransactionService
 	accountRepo repositories.AccountRepository
+	
+	// Per-user sync status
+	mu      sync.RWMutex
+	syncMap map[string]SyncStatus
 }
 
 func NewMonobankService(db *gorm.DB, txService TransactionService, accountRepo repositories.AccountRepository) *MonobankService {
-	return &MonobankService{db: db, txService: txService, accountRepo: accountRepo}
+	return &MonobankService{
+		db:          db,
+		txService:   txService,
+		accountRepo: accountRepo,
+		syncMap:     make(map[string]SyncStatus),
+	}
 }
 
-func (s *MonobankService) GetSyncStatus() SyncStatus {
-	return currentSyncStatus
+func (s *MonobankService) GetSyncStatus(userID string) SyncStatus {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	
+	if status, ok := s.syncMap[userID]; ok {
+		return status
+	}
+	return SyncStatus{Message: "Очікування..."}
+}
+
+func (s *MonobankService) updateStatus(userID string, status SyncStatus) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.syncMap[userID] = status
 }
 
 // 1. Connect
@@ -363,12 +379,14 @@ func (s *MonobankService) getOrCreateSystemStorageType(familyID, name, slug stri
 }
 // 4. Sync (ВИПРАВЛЕНО: Оптимізація працює завжди)
 func (s *MonobankService) Sync(userID string, targetAccountID string) (int, error) {
-	currentSyncStatus = SyncStatus{IsRunning: true, Message: "Ініціалізація...", TotalImported: 0}
+	status := SyncStatus{IsRunning: true, Message: "Ініціалізація...", TotalImported: 0}
+	s.updateStatus(userID, status)
 
 	defer func() {
 		time.Sleep(2 * time.Second)
-		currentSyncStatus.IsRunning = false
-		currentSyncStatus.Message = "Готово"
+		status.IsRunning = false
+		status.Message = "Готово"
+		s.updateStatus(userID, status)
 	}()
 
 	var user models.User
@@ -462,13 +480,15 @@ func (s *MonobankService) Sync(userID string, targetAccountID string) (int, erro
 			}
 
 			if requestCounter > 0 {
-				currentSyncStatus.Message = fmt.Sprintf("Очікування API... Імпортовано: %d", totalImported)
+				status.Message = fmt.Sprintf("Очікування API... Імпортовано: %d", totalImported)
+				s.updateStatus(userID, status)
 				fmt.Println("⏳ Rate Limit prevention: Sleeping 61s...")
 				time.Sleep(61 * time.Second)
 			}
 			requestCounter++
 
-			currentSyncStatus.Message = fmt.Sprintf("Завантаження %s...", mapping.Name)
+			status.Message = fmt.Sprintf("Завантаження %s...", mapping.Name)
+			s.updateStatus(userID, status)
 
 			fmt.Printf("📥 Fetching [%s]: %s -> %s\n",
 				mapping.Name,
@@ -520,7 +540,8 @@ func (s *MonobankService) Sync(userID string, targetAccountID string) (int, erro
 				if len(inputs) > 0 {
 					count, _ := s.txService.BatchCreate(inputs, &user)
 					totalImported += count
-					currentSyncStatus.TotalImported = totalImported
+					status.TotalImported = totalImported
+					s.updateStatus(userID, status)
 					fmt.Printf("   💾 Saved %d new transactions to DB\n", count)
 				} else {
 					fmt.Println("   ⚪ All received transactions are duplicates")
@@ -533,7 +554,8 @@ func (s *MonobankService) Sync(userID string, targetAccountID string) (int, erro
 	}
 
 	// --- 2. ОНОВЛЕННЯ БАЛАНСІВ ---
-	currentSyncStatus.Message = "Оновлення балансів..."
+	status.Message = "Оновлення балансів..."
+	s.updateStatus(userID, status)
 
 	clientInfo, err := s.fetchClientInfo(token)
 
