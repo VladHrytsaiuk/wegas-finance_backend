@@ -81,7 +81,19 @@ type MonoWebhookPayload struct {
 
 // === Service ===
 
-type MonobankService struct {
+type MonobankService interface {
+	Connect(userID, familyID, rawToken string) ([]MonoAccount, error)
+	GetUserData(userID string) ([]MonoAccount, []models.BankAccountMapping, error)
+	RefreshClientInfo(userID string) ([]MonoAccount, []models.BankAccountMapping, error)
+	SaveSettings(userID, familyID string, accounts []models.BankAccountMapping) error
+	Sync(userID string, targetAccountID string) (int, error)
+	Disconnect(userID string) error
+	GetSyncStatus(userID string) SyncStatus
+	GlobalResyncCounterparties() (int, error)
+	ProcessWebhook(payload MonoWebhookPayload) error
+}
+
+type monobankService struct {
 	db          *gorm.DB
 	txService   TransactionService
 	accountRepo repositories.AccountRepository
@@ -96,8 +108,8 @@ type MonobankService struct {
 	lastRequestMap map[string]time.Time
 }
 
-func NewMonobankService(db *gorm.DB, txService TransactionService, accountRepo repositories.AccountRepository, clock utils.Clock) *MonobankService {
-	return &MonobankService{
+func NewMonobankService(db *gorm.DB, txService TransactionService, accountRepo repositories.AccountRepository, clock utils.Clock) MonobankService {
+	return &monobankService{
 		db:             db,
 		txService:      txService,
 		accountRepo:    accountRepo,
@@ -108,7 +120,7 @@ func NewMonobankService(db *gorm.DB, txService TransactionService, accountRepo r
 }
 
 // waitForMonobankLimit гарантує, що між запитами до Mono API з одним токеном минає мінімум 61 секунда
-func (s *MonobankService) waitForMonobankLimit(token string) {
+func (s *monobankService) waitForMonobankLimit(token string) {
 	s.lastRequestMu.Lock()
 	defer s.lastRequestMu.Unlock()
 
@@ -129,7 +141,7 @@ func (s *MonobankService) waitForMonobankLimit(token string) {
 	s.lastRequestMap[token] = s.clock.Now()
 }
 
-func (s *MonobankService) GetSyncStatus(userID string) SyncStatus {
+func (s *monobankService) GetSyncStatus(userID string) SyncStatus {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	
@@ -139,14 +151,14 @@ func (s *MonobankService) GetSyncStatus(userID string) SyncStatus {
 	return SyncStatus{Message: "Очікування..."}
 }
 
-func (s *MonobankService) updateStatus(userID string, status SyncStatus) {
+func (s *monobankService) updateStatus(userID string, status SyncStatus) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.syncMap[userID] = status
 }
 
 // 1. Connect
-func (s *MonobankService) Connect(userID, familyID, rawToken string) ([]MonoAccount, error) {
+func (s *monobankService) Connect(userID, familyID, rawToken string) ([]MonoAccount, error) {
 	clientInfo, err := s.fetchClientInfo(rawToken)
 	if err != nil {
 		return nil, err
@@ -185,7 +197,7 @@ func (s *MonobankService) Connect(userID, familyID, rawToken string) ([]MonoAcco
 }
 // 2. GetUserData - ТІЛЬКИ З БАЗИ (Для відображення статусу в профілі)
 // Ніяких запитів до API Monobank. Дуже швидко.
-func (s *MonobankService) GetUserData(userID string) ([]MonoAccount, []models.BankAccountMapping, error) {
+func (s *monobankService) GetUserData(userID string) ([]MonoAccount, []models.BankAccountMapping, error) {
 	var conn models.BankConnection
 	// 1. Перевіряємо, чи є активне підключення
 	err := s.db.Where("user_id = ? AND provider = 'monobank' AND is_active = ?", userID, true).First(&conn).Error
@@ -238,7 +250,7 @@ func (s *MonobankService) GetUserData(userID string) ([]MonoAccount, []models.Ba
 
 // 2.5. RefreshClientInfo - ЗАПИТ ДО API (Для модалки налаштувань)
 // Викликається тільки коли юзер тисне "Налаштувати". Знаходить нові рахунки.
-func (s *MonobankService) RefreshClientInfo(userID string) ([]MonoAccount, []models.BankAccountMapping, error) {
+func (s *monobankService) RefreshClientInfo(userID string) ([]MonoAccount, []models.BankAccountMapping, error) {
 	var conn models.BankConnection
 	if err := s.db.Where("user_id = ? AND provider = 'monobank' AND is_active = ?", userID, true).First(&conn).Error; err != nil {
 		return nil, nil, errors.New("connection not found")
@@ -265,7 +277,7 @@ func (s *MonobankService) RefreshClientInfo(userID string) ([]MonoAccount, []mod
 
 // 3. SaveSettings
 
-func (s *MonobankService) SaveSettings(userID, familyID string, accounts []models.BankAccountMapping) error {
+func (s *monobankService) SaveSettings(userID, familyID string, accounts []models.BankAccountMapping) error {
 	var conn models.BankConnection
 	if err := s.db.Where("user_id = ? AND provider = 'monobank'", userID).First(&conn).Error; err != nil {
 		return errors.New("connection not found")
@@ -386,7 +398,7 @@ func (s *MonobankService) SaveSettings(userID, familyID string, accounts []model
 
 // Допоміжний метод для пошуку/створення типу збереження (StorageType)
 // Щоб ми могли записати, що це саме "Банка", а не "Сейф" чи "Конверт"
-func (s *MonobankService) getOrCreateSystemStorageType(familyID, name, slug string) (*string, error) {
+func (s *monobankService) getOrCreateSystemStorageType(familyID, name, slug string) (*string, error) {
 	var st models.StorageType
 	
 	// 1. Шукаємо системний або сімейний тип з таким слагом
@@ -416,7 +428,7 @@ func (s *MonobankService) getOrCreateSystemStorageType(familyID, name, slug stri
 	return &newSt.ID, nil
 }
 // 4. Sync (ВИПРАВЛЕНО: Оптимізація працює завжди)
-func (s *MonobankService) Sync(userID string, targetAccountID string) (int, error) {
+func (s *monobankService) Sync(userID string, targetAccountID string) (int, error) {
 	// 1. Перевірка: чи не запущена вже синхронізація для цього юзера
 	s.mu.Lock()
 	if status, ok := s.syncMap[userID]; ok && status.IsRunning {
@@ -654,7 +666,7 @@ func (s *MonobankService) Sync(userID string, targetAccountID string) (int, erro
 }
 // --- Helpers ---
 
-func (s *MonobankService) fetchClientInfo(token string) (*MonoClientInfo, error) {
+func (s *monobankService) fetchClientInfo(token string) (*MonoClientInfo, error) {
 	s.waitForMonobankLimit(token)
 	req, _ := http.NewRequest("GET", "https://api.monobank.ua/personal/client-info", nil)
 	req.Header.Set("X-Token", token)
@@ -705,7 +717,7 @@ func (s *MonobankService) fetchClientInfo(token string) (*MonoClientInfo, error)
 	return &info, nil
 }
 
-func (s *MonobankService) fetchStatement(token, accountID string, from, to int64) ([]MonoTransaction, error) {
+func (s *monobankService) fetchStatement(token, accountID string, from, to int64) ([]MonoTransaction, error) {
 	s.waitForMonobankLimit(token)
 	url := fmt.Sprintf("https://api.monobank.ua/personal/statement/%s/%d/%d", accountID, from, to)
 
@@ -738,7 +750,7 @@ func (s *MonobankService) fetchStatement(token, accountID string, from, to int64
 }
 
 
-func (s *MonobankService) Disconnect(userID string) error {
+func (s *monobankService) Disconnect(userID string) error {
   var conn models.BankConnection
   
   // Шукаємо підключення (звичайний пошук ігнорує soft-deleted, це ок)
@@ -760,7 +772,7 @@ func (s *MonobankService) Disconnect(userID string) error {
 }
 // services/monobank_service.go
 // GlobalResyncCounterparties примусово перепаршує контрагентів для ВСІХ транзакцій у базі
-func (s *MonobankService) GlobalResyncCounterparties() (int, error) {
+func (s *monobankService) GlobalResyncCounterparties() (int, error) {
   // 1. Беремо ВСІ транзакції з Монобанку по всій базі (ігноруємо користувача)
   var txs []models.Transaction
   if err := s.db.Where("external_id != '' AND deleted_at IS NULL").Find(&txs).Error; err != nil {
@@ -797,7 +809,7 @@ func (s *MonobankService) GlobalResyncCounterparties() (int, error) {
 }
 
 // ProcessWebhook обробляє вхідну транзакцію від Monobank
-func (s *MonobankService) ProcessWebhook(payload MonoWebhookPayload) error {
+func (s *monobankService) ProcessWebhook(payload MonoWebhookPayload) error {
 	if payload.Type != "StatementItem" {
 		return nil // Ігноруємо інші типи (наприклад, перевірка з'єднання)
 	}

@@ -9,10 +9,10 @@ import (
 )
 
 type GoalController struct {
-	service *services.GoalService
+	service services.GoalService
 }
 
-func NewGoalController(service *services.GoalService) *GoalController {
+func NewGoalController(service services.GoalService) *GoalController {
 	return &GoalController{service: service}
 }
 

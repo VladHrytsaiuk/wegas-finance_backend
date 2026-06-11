@@ -469,8 +469,7 @@ import (
 				updates["counterparty_id"] = newData.CounterpartyID
 			}
 
-			if err := txDB.Model(&models.Transaction{}).
-				Where("id = ? AND family_id = ?", id, familyID).
+			if err := txDB.Model(&oldTx).
 				Updates(updates).Error; err != nil {
 				return err
 			}

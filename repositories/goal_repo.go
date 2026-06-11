@@ -7,26 +7,36 @@ import (
 	"gorm.io/gorm"
 )
 
-type GoalRepository struct {
+type GoalRepository interface {
+	GetDB() *gorm.DB
+	Create(goal *models.Goal) error
+	FindOne(id string) (*models.Goal, error)
+	FindAllByFamily(familyID string, userID string) ([]models.Goal, error)
+	Update(goal *models.Goal) error
+	Delete(id string) error
+	FindAllActive() ([]models.Goal, error)
+}
+
+type goalRepo struct {
 	db *gorm.DB
 }
 
-func NewGoalRepository(db *gorm.DB) *GoalRepository {
-	return &GoalRepository{db: db}
+func NewGoalRepository(db *gorm.DB) GoalRepository {
+	return &goalRepo{db: db}
 }
 
 // GetDB повертає екземпляр DB (потрібен сервісу для транзакцій або специфічних оновлень)
-func (r *GoalRepository) GetDB() *gorm.DB {
+func (r *goalRepo) GetDB() *gorm.DB {
 	return r.db
 }
 
-func (r *GoalRepository) Create(goal *models.Goal) error {
+func (r *goalRepo) Create(goal *models.Goal) error {
 	return r.db.Create(goal).Error
 }
 
 // FindOne шукає ціль за ID, ігноруючи видалені.
 // Виправлено: враховує і 0, і NULL для deleted_at
-func (r *GoalRepository) FindOne(id string) (*models.Goal, error) {
+func (r *goalRepo) FindOne(id string) (*models.Goal, error) {
 	var goal models.Goal
 	err := r.db.Preload("Accounts").
 		Where("id = ? AND (deleted_at = 0 OR deleted_at IS NULL)", id).
@@ -39,7 +49,7 @@ func (r *GoalRepository) FindOne(id string) (*models.Goal, error) {
 }
 
 // FindAllByFamily повертає цілі сім'ї з урахуванням прав доступу
-func (r *GoalRepository) FindAllByFamily(familyID string, userID string) ([]models.Goal, error) {
+func (r *goalRepo) FindAllByFamily(familyID string, userID string) ([]models.Goal, error) {
 	var goals []models.Goal
 
 	// Логіка:
@@ -55,11 +65,11 @@ func (r *GoalRepository) FindAllByFamily(familyID string, userID string) ([]mode
 	return goals, err
 }
 
-func (r *GoalRepository) Update(goal *models.Goal) error {
+func (r *goalRepo) Update(goal *models.Goal) error {
 	return r.db.Save(goal).Error
 }
 
-func (r *GoalRepository) Delete(id string) error {
+func (r *goalRepo) Delete(id string) error {
 	now := time.Now().UnixMilli()
 
 	return r.db.Transaction(func(tx *gorm.DB) error {
@@ -83,7 +93,7 @@ func (r *GoalRepository) Delete(id string) error {
 	})
 }
 
-func (r *GoalRepository) FindAllActive() ([]models.Goal, error) {
+func (r *goalRepo) FindAllActive() ([]models.Goal, error) {
 	var goals []models.Goal
 	err := r.db.Preload("Accounts").
 		Where("status = ? AND (deleted_at = 0 OR deleted_at IS NULL)", "active").

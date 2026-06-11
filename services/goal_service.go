@@ -21,18 +21,30 @@ var (
 	ErrForbidden    = errors.New("access denied")
 )
 
-type GoalService struct {
-	repo            *repositories.GoalRepository
+type GoalService interface {
+	UploadGoalPhoto(goalID string, userID string, fileReader io.Reader) (string, error)
+	Create(goal *models.Goal, userID string) error
+	GetAll(familyID string, userID string) ([]models.Goal, error)
+	GetOne(id string, userID string) (*models.Goal, error)
+	Update(incomingGoal *models.Goal, userID string) error
+	Delete(id string, userID string) error
+	LinkAccount(goalID string, accountID string) error
+	UnlinkAccount(accountID string) error
+	CheckOverdueGoals() error
+}
+
+type goalService struct {
+	repo            repositories.GoalRepository
 	accountRepo     repositories.AccountRepository
 	currencyService CurrencyService
 }
 
 func NewGoalService(
-	repo *repositories.GoalRepository,
+	repo repositories.GoalRepository,
 	accRepo repositories.AccountRepository,
 	currService CurrencyService,
-) *GoalService {
-	return &GoalService{
+) GoalService {
+	return &goalService{
 		repo:            repo,
 		accountRepo:     accRepo,
 		currencyService: currService,
@@ -42,7 +54,7 @@ func NewGoalService(
 // --- ДОПОМІЖНІ МЕТОДИ ПРИВАТНОСТІ ---
 
 // verifyEditAccess: Редагувати може тільки власник (userID)
-func (s *GoalService) verifyEditAccess(goal *models.Goal, userID string) error {
+func (s *goalService) verifyEditAccess(goal *models.Goal, userID string) error {
 	if goal.UserID != userID {
 		return ErrForbidden
 	}
@@ -50,7 +62,7 @@ func (s *GoalService) verifyEditAccess(goal *models.Goal, userID string) error {
 }
 
 // verifyReadAccess: Читати може власник АБО якщо ціль публічна і не прихована від цього юзера
-func (s *GoalService) verifyReadAccess(goal *models.Goal, userID string) error {
+func (s *goalService) verifyReadAccess(goal *models.Goal, userID string) error {
 	if goal.UserID == userID {
 		return nil
 	}
@@ -63,7 +75,7 @@ func (s *GoalService) verifyReadAccess(goal *models.Goal, userID string) error {
 // --- ОСНОВНА ЛОГІКА ---
 
 // UploadGoalPhoto завантажує фото і оновлює БД
-func (s *GoalService) UploadGoalPhoto(goalID string, userID string, fileReader io.Reader) (string, error) {
+func (s *goalService) UploadGoalPhoto(goalID string, userID string, fileReader io.Reader) (string, error) {
 	// 1. Знаходимо ціль
 	existingGoal, err := s.repo.FindOne(goalID)
 	if err != nil {
@@ -123,7 +135,7 @@ func (s *GoalService) UploadGoalPhoto(goalID string, userID string, fileReader i
 	return webPath, nil
 }
 
-func (s *GoalService) Create(goal *models.Goal, userID string) error {
+func (s *goalService) Create(goal *models.Goal, userID string) error {
 	goal.ID = uuid.New().String()
 	goal.UserID = userID // Власник
 	goal.CreatedAt = time.Now().UnixMilli()
@@ -140,7 +152,7 @@ func (s *GoalService) Create(goal *models.Goal, userID string) error {
 	return s.repo.Create(goal)
 }
 
-func (s *GoalService) GetAll(familyID string, userID string) ([]models.Goal, error) {
+func (s *goalService) GetAll(familyID string, userID string) ([]models.Goal, error) {
 	// Репозиторій вже має фільтрувати за (familyID + Privacy Logic)
 	goals, err := s.repo.FindAllByFamily(familyID, userID)
 	if err != nil {
@@ -164,7 +176,7 @@ func (s *GoalService) GetAll(familyID string, userID string) ([]models.Goal, err
 	return goals, nil
 }
 
-func (s *GoalService) GetOne(id string, userID string) (*models.Goal, error) {
+func (s *goalService) GetOne(id string, userID string) (*models.Goal, error) {
 	goal, err := s.repo.FindOne(id)
 	if err != nil {
 		return nil, err
@@ -187,7 +199,7 @@ func (s *GoalService) GetOne(id string, userID string) (*models.Goal, error) {
 	return goal, nil
 }
 
-func (s *GoalService) Update(incomingGoal *models.Goal, userID string) error {
+func (s *goalService) Update(incomingGoal *models.Goal, userID string) error {
 	existingGoal, err := s.repo.FindOne(incomingGoal.ID)
 	if err != nil {
 		return err
@@ -245,7 +257,7 @@ func (s *GoalService) Update(incomingGoal *models.Goal, userID string) error {
 	return nil
 }
 
-func (s *GoalService) Delete(id string, userID string) error {
+func (s *goalService) Delete(id string, userID string) error {
 	existingGoal, err := s.repo.FindOne(id)
 	if err != nil {
 		// Якщо вже видалено або не знайдено - вважаємо успіхом, щоб не блокувати фронт
@@ -264,7 +276,7 @@ func (s *GoalService) Delete(id string, userID string) error {
 	return s.repo.Delete(id)
 }
 
-func (s *GoalService) calculateTotalAmount(goal *models.Goal) int64 {
+func (s *goalService) calculateTotalAmount(goal *models.Goal) int64 {
 	var total int64 = 0
 	for _, acc := range goal.Accounts {
 		if acc.Balance <= 0 {
@@ -283,7 +295,7 @@ func (s *GoalService) calculateTotalAmount(goal *models.Goal) int64 {
 	return total
 }
 
-func (s *GoalService) LinkAccount(goalID string, accountID string) error {
+func (s *goalService) LinkAccount(goalID string, accountID string) error {
 	// Тут також варто додати перевірку, чи належить accountID тій самій сім'ї/юзеру
 	acc, err := s.accountRepo.GetByID(accountID)
 	if err != nil {
@@ -293,7 +305,7 @@ func (s *GoalService) LinkAccount(goalID string, accountID string) error {
 	return s.accountRepo.Update(acc)
 }
 
-func (s *GoalService) UnlinkAccount(accountID string) error {
+func (s *goalService) UnlinkAccount(accountID string) error {
 	acc, err := s.accountRepo.GetByID(accountID)
 	if err != nil {
 		return err
@@ -303,7 +315,7 @@ func (s *GoalService) UnlinkAccount(accountID string) error {
 }
 
 // CheckOverdueGoals - системний метод (background job), тут userID не передаємо
-func (s *GoalService) CheckOverdueGoals() error {
+func (s *goalService) CheckOverdueGoals() error {
 	goals, err := s.repo.FindAllActive()
 	if err != nil {
 		return err

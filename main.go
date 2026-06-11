@@ -257,9 +257,9 @@ func startApp() {
 // startSchedulers запускає фонові завдання в горутинах
 func startSchedulers(
 	db *gorm.DB,
-	goalService *services.GoalService,
+	goalService services.GoalService,
 	currencyService services.CurrencyService,
-	monobankService *services.MonobankService,
+	monobankService services.MonobankService,
 ) {
 	// 1. Перевірка цілей (Goals Check) щоночі
 	go func() {

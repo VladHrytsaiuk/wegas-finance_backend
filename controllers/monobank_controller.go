@@ -11,10 +11,10 @@ import (
 )
 
 type MonobankController struct {
-	service *services.MonobankService
+	service services.MonobankService
 }
 
-func NewMonobankController(service *services.MonobankService) *MonobankController {
+func NewMonobankController(service services.MonobankService) *MonobankController {
 	return &MonobankController{service: service}
 }
 

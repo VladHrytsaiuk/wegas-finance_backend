@@ -1,0 +1,208 @@
+package repositories
+
+import (
+	"testing"
+	"time"
+
+	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+)
+
+func TestTransactionRepo_Integration(t *testing.T) {
+	db, err := SetupTestDB()
+	assert.NoError(t, err)
+
+	repo := NewTransactionRepository(db)
+
+	// Setup initial data
+	family := models.Family{
+		Base: models.Base{ID: uuid.NewString()},
+		Name: "Test Family",
+	}
+	db.Create(&family)
+
+	user := models.User{
+		Base:     models.Base{ID: uuid.NewString()},
+		FamilyID: family.ID,
+		Name:     "Test User",
+		Email:    "test@example.com",
+	}
+	db.Create(&user)
+
+	account1 := models.Account{
+		Base:           models.Base{ID: uuid.NewString()},
+		FamilyID:       family.ID,
+		UserID:         user.ID,
+		Name:           "Account 1",
+		Currency:       "UAH",
+		InitialBalance: 1000,
+		Balance:        1000,
+	}
+	db.Create(&account1)
+
+	account2 := models.Account{
+		Base:           models.Base{ID: uuid.NewString()},
+		FamilyID:       family.ID,
+		UserID:         user.ID,
+		Name:           "Account 2",
+		Currency:       "UAH",
+		InitialBalance: 500,
+		Balance:        500,
+	}
+	db.Create(&account2)
+
+	category := models.Category{
+		Base:     models.Base{ID: uuid.NewString()},
+		FamilyID: family.ID,
+		Name:     "Food",
+		Type:     "expense",
+	}
+	db.Create(&category)
+
+	counterparty := models.Counterparty{
+		Base:     models.Base{ID: uuid.NewString()},
+		FamilyID: family.ID,
+		Name:     "Supermarket",
+	}
+	db.Create(&counterparty)
+
+	t.Run("TestCreateExpense", func(t *testing.T) {
+		tx := &models.Transaction{
+			Base:           models.Base{ID: uuid.NewString()},
+			FamilyID:       family.ID,
+			UserID:         user.ID,
+			AccountID:      account1.ID,
+			CategoryID:     category.ID,
+			CounterpartyID: counterparty.ID,
+			Type:           "expense",
+			Amount:         200,
+			Date:           time.Now().UnixMilli(),
+		}
+
+		err := repo.Create(tx, nil, nil, nil)
+		assert.NoError(t, err)
+
+		// Verify account balance
+		var updatedAcc models.Account
+		db.First(&updatedAcc, "id = ?", account1.ID)
+		assert.Equal(t, int64(800), updatedAcc.Balance)
+
+		// Verify ServerVersion updated
+		assert.True(t, tx.ServerVersion > 0)
+		
+		// Verify counterparty balance
+		var cpBalance models.CounterpartyBalance
+		db.First(&cpBalance, "counterparty_id = ? AND currency = ?", counterparty.ID, "UAH")
+		// expense doesn't affect counterparty debt by default unless it's a loan
+		// wait, calculateDebtDelta("expense", 200) -> 0
+		assert.Equal(t, int64(0), cpBalance.Balance)
+	})
+
+	t.Run("TestCreateTransfer", func(t *testing.T) {
+		// Reset balances
+		db.Model(&models.Account{}).Where("id = ?", account1.ID).Update("balance", 1000)
+		db.Model(&models.Account{}).Where("id = ?", account2.ID).Update("balance", 500)
+
+		txFrom := &models.Transaction{
+			Base:      models.Base{ID: uuid.NewString()},
+			FamilyID:  family.ID,
+			UserID:    user.ID,
+			AccountID: account1.ID,
+			Type:      "transfer_out",
+			Amount:    300,
+			Date:      time.Now().UnixMilli(),
+		}
+		txTo := &models.Transaction{
+			Base:      models.Base{ID: uuid.NewString()},
+			FamilyID:  family.ID,
+			UserID:    user.ID,
+			AccountID: account2.ID,
+			Type:      "transfer_in",
+			Amount:    300,
+			Date:      time.Now().UnixMilli(),
+		}
+
+		err := repo.CreateTransfer(txFrom, txTo)
+		assert.NoError(t, err)
+
+		var acc1, acc2 models.Account
+		db.First(&acc1, "id = ?", account1.ID)
+		db.First(&acc2, "id = ?", account2.ID)
+
+		assert.Equal(t, int64(700), acc1.Balance)
+		assert.Equal(t, int64(800), acc2.Balance)
+	})
+
+	t.Run("TestUpdateTransaction", func(t *testing.T) {
+		// Create a transaction first
+		tx := &models.Transaction{
+			Base:      models.Base{ID: uuid.NewString()},
+			FamilyID:  family.ID,
+			UserID:    user.ID,
+			AccountID: account1.ID,
+			Type:      "expense",
+			Amount:    100,
+			Date:      time.Now().UnixMilli(),
+		}
+		db.Model(&models.Account{}).Where("id = ?", account1.ID).Update("balance", 1000)
+		err := repo.Create(tx, nil, nil, nil)
+		assert.NoError(t, err)
+
+		// Update amount
+		txUpdate := *tx
+		oldVersion := tx.ServerVersion
+		txUpdate.Amount = 150
+		
+		// Wait a bit to ensure UnixNano changes
+		time.Sleep(2 * time.Millisecond)
+		
+		err = repo.Update(tx.ID, family.ID, &txUpdate, nil, nil)
+		assert.NoError(t, err)
+
+		var updatedTx models.Transaction
+		db.First(&updatedTx, "id = ?", tx.ID)
+		assert.True(t, updatedTx.ServerVersion > oldVersion, "ServerVersion should increase on update")
+
+		var updatedAcc models.Account
+		db.First(&updatedAcc, "id = ?", account1.ID)
+		// 1000 - 100 (original) + 100 (revert) - 150 (new) = 850
+		assert.Equal(t, int64(850), updatedAcc.Balance)
+
+		// Update type to income
+		txUpdate2 := txUpdate
+		txUpdate2.Type = "income"
+		txUpdate2.Amount = 50
+		err = repo.Update(tx.ID, family.ID, &txUpdate2, nil, nil)
+		assert.NoError(t, err)
+
+		db.First(&updatedAcc, "id = ?", account1.ID)
+		// 850 + 150 (revert expense) + 50 (income) = 1050
+		assert.Equal(t, int64(1050), updatedAcc.Balance)
+	})
+
+	t.Run("TestDeleteTransaction", func(t *testing.T) {
+		db.Model(&models.Account{}).Where("id = ?", account1.ID).Update("balance", 1000)
+		tx := &models.Transaction{
+			Base:      models.Base{ID: uuid.NewString()},
+			FamilyID:  family.ID,
+			UserID:    user.ID,
+			AccountID: account1.ID,
+			Type:      "expense",
+			Amount:    100,
+			Date:      time.Now().UnixMilli(),
+		}
+		repo.Create(tx, nil, nil, nil)
+
+		err := repo.Delete(tx, nil)
+		assert.NoError(t, err)
+
+		var updatedAcc models.Account
+		db.First(&updatedAcc, "id = ?", account1.ID)
+		assert.Equal(t, int64(1000), updatedAcc.Balance)
+
+		var deletedTx models.Transaction
+		db.Unscoped().First(&deletedTx, "id = ?", tx.ID)
+		assert.NotNil(t, deletedTx.DeletedAt)
+	})
+}
