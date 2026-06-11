@@ -93,7 +93,7 @@ type StorageService interface {
 | [x] | **High** 🏗️ | `Architecture` | Створити `StorageService` для роботи з файлами (S3/Local). |
 | [x] | **Local-First** 🏗️ | `models.Base` | Додати поля `ServerVersion` та `ClientUpdatedAt`. |
 | [x] | **Scalability** 📈 | `Monobank` | Реалізувати Webhook ендпоінт для Monobank. |
-| [ ] | **Scalability** 📈 | `Monobank` | Оптимізувати `time.Sleep` у фоновій синхронізації (використати чергу або лімітер). |
+| [x] | **Scalability** 📈 | `Monobank` | Оптимізувати `time.Sleep` у фоновій синхронізації (використати чергу або лімітер). |
 | [ ] | **Testing** 🧪 | `Global` | Запровадити `Clock` інтерфейс для роботи з часом. |
 
 **Вердикт:** Проєкт має здорову архітектуру для MVP, але потребує "гігієнічного" рефакторингу перед впровадженням Local-First, щоб уникнути хаосу при вирішенні конфліктів даних.

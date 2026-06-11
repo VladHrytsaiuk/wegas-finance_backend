@@ -89,15 +89,42 @@ type MonobankService struct {
 	// Per-user sync status
 	mu      sync.RWMutex
 	syncMap map[string]SyncStatus
+
+	// Rate limiting (per token)
+	lastRequestMu  sync.Mutex
+	lastRequestMap map[string]time.Time
 }
 
 func NewMonobankService(db *gorm.DB, txService TransactionService, accountRepo repositories.AccountRepository) *MonobankService {
 	return &MonobankService{
-		db:          db,
-		txService:   txService,
-		accountRepo: accountRepo,
-		syncMap:     make(map[string]SyncStatus),
+		db:             db,
+		txService:      txService,
+		accountRepo:    accountRepo,
+		syncMap:        make(map[string]SyncStatus),
+		lastRequestMap: make(map[string]time.Time),
 	}
+}
+
+// waitForMonobankLimit гарантує, що між запитами до Mono API з одним токеном минає мінімум 61 секунда
+func (s *MonobankService) waitForMonobankLimit(token string) {
+	s.lastRequestMu.Lock()
+	defer s.lastRequestMu.Unlock()
+
+	lastReq, exists := s.lastRequestMap[token]
+	if !exists {
+		s.lastRequestMap[token] = time.Now()
+		return
+	}
+
+	elapsed := time.Since(lastReq)
+	waitTime := 61*time.Second - elapsed
+
+	if waitTime > 0 {
+		fmt.Printf("⏳ Rate Limit: Waiting %v for token...\n", waitTime)
+		time.Sleep(waitTime)
+	}
+
+	s.lastRequestMap[token] = time.Now()
 }
 
 func (s *MonobankService) GetSyncStatus(userID string) SyncStatus {
@@ -388,6 +415,14 @@ func (s *MonobankService) getOrCreateSystemStorageType(familyID, name, slug stri
 }
 // 4. Sync (ВИПРАВЛЕНО: Оптимізація працює завжди)
 func (s *MonobankService) Sync(userID string, targetAccountID string) (int, error) {
+	// 1. Перевірка: чи не запущена вже синхронізація для цього юзера
+	s.mu.Lock()
+	if status, ok := s.syncMap[userID]; ok && status.IsRunning {
+		s.mu.Unlock()
+		return 0, nil // Вже працює
+	}
+	s.mu.Unlock()
+
 	status := SyncStatus{IsRunning: true, Message: "Ініціалізація...", TotalImported: 0}
 	s.updateStatus(userID, status)
 
@@ -440,7 +475,6 @@ func (s *MonobankService) Sync(userID string, targetAccountID string) (int, erro
 	}
 
 	totalImported := 0
-	requestCounter := 0
 
 	// --- 1. ІМПОРТ ТРАНЗАКЦІЙ ---
 	for _, mapping := range mappings {
@@ -487,14 +521,6 @@ func (s *MonobankService) Sync(userID string, targetAccountID string) (int, erro
 			if endTime.Sub(startTime) < 10*time.Second {
 				break
 			}
-
-			if requestCounter > 0 {
-				status.Message = fmt.Sprintf("Очікування API... Імпортовано: %d", totalImported)
-				s.updateStatus(userID, status)
-				fmt.Println("⏳ Rate Limit prevention: Sleeping 61s...")
-				time.Sleep(61 * time.Second)
-			}
-			requestCounter++
 
 			status.Message = fmt.Sprintf("Завантаження %s...", mapping.Name)
 			s.updateStatus(userID, status)
@@ -627,6 +653,7 @@ func (s *MonobankService) Sync(userID string, targetAccountID string) (int, erro
 // --- Helpers ---
 
 func (s *MonobankService) fetchClientInfo(token string) (*MonoClientInfo, error) {
+	s.waitForMonobankLimit(token)
 	req, _ := http.NewRequest("GET", "https://api.monobank.ua/personal/client-info", nil)
 	req.Header.Set("X-Token", token)
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -677,6 +704,7 @@ func (s *MonobankService) fetchClientInfo(token string) (*MonoClientInfo, error)
 }
 
 func (s *MonobankService) fetchStatement(token, accountID string, from, to int64) ([]MonoTransaction, error) {
+	s.waitForMonobankLimit(token)
 	url := fmt.Sprintf("https://api.monobank.ua/personal/statement/%s/%d/%d", accountID, from, to)
 
 	// 🔥 ЛОГУВАННЯ ЗАПИТУ
