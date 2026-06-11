@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -104,13 +105,20 @@ import (
 	func (r *txRepo) Create(t *models.Transaction, items []models.TransactionItem, tagIDs []string, newAsset *models.Asset) error {
 		return r.db.Transaction(func(txDB *gorm.DB) error {
 			
-			// 🔥 ВИПРАВЛЕННЯ ТУТ:
-			// Якщо є AccountID - беремо валюту рахунку.
+			// 🔥 ПЕРЕВІРКА ТА ВАЛЮТА:
 			if t.AccountID != "" {
 				var account models.Account
-				if err := txDB.Select("currency").First(&account, "id = ?", t.AccountID).Error; err != nil {
-					return err
+				// Блокуємо запис для перевірки (FOR UPDATE), щоб уникнути race condition
+				if err := txDB.Set("gorm:query_option", "FOR UPDATE").First(&account, "id = ?", t.AccountID).Error; err != nil {
+					return fmt.Errorf("account not found: %w", err)
 				}
+				
+				// Блокуємо ручне створення транзакцій для синхронізованих рахунків
+				// Виняток: якщо транзакція прийшла з ExternalID (тобто це сам процес синхронізації)
+				if account.IsSynced && t.ExternalID == "" {
+					return fmt.Errorf("🚫 Цей рахунок (%s) синхронізується автоматично. Ручне додавання заборонено.", account.Name)
+				}
+				
 				t.Currency = account.Currency
 			} else if t.Currency == "" {
 				// Якщо немає ні рахунку, ні валюти - повертаємо помилку
@@ -193,13 +201,21 @@ import (
 	// === CREATE TRANSFER ===
 	func (r *txRepo) CreateTransfer(from *models.Transaction, to *models.Transaction) error {
 		return r.db.Transaction(func(txDB *gorm.DB) error {
-			// Отримуємо валюти для транзакцій
+			// Отримуємо дані рахунків з блокуванням
 			var accFrom, accTo models.Account
-			if err := txDB.Select("currency").First(&accFrom, "id = ?", from.AccountID).Error; err != nil {
-				return err
+			if err := txDB.Set("gorm:query_option", "FOR UPDATE").First(&accFrom, "id = ?", from.AccountID).Error; err != nil {
+				return fmt.Errorf("source account not found: %w", err)
 			}
-			if err := txDB.Select("currency").First(&accTo, "id = ?", to.AccountID).Error; err != nil {
-				return err
+			if err := txDB.Set("gorm:query_option", "FOR UPDATE").First(&accTo, "id = ?", to.AccountID).Error; err != nil {
+				return fmt.Errorf("target account not found: %w", err)
+			}
+
+			// Блокуємо перекази для синхронізованих рахунків
+			if accFrom.IsSynced {
+				return fmt.Errorf("🚫 Рахунок відправника (%s) синхронізується автоматично. Ручні перекази заборонено.", accFrom.Name)
+			}
+			if accTo.IsSynced {
+				return fmt.Errorf("🚫 Рахунок отримувача (%s) синхронізується автоматично. Ручні перекази заборонено.", accTo.Name)
 			}
 
 			from.Currency = accFrom.Currency
@@ -368,8 +384,21 @@ import (
 	func (r *txRepo) Update(id string, familyID string, newData *models.Transaction, items []models.TransactionItem, tagIDs []string) error {
 		return r.db.Transaction(func(txDB *gorm.DB) error {
 			var oldTx models.Transaction
-			if err := txDB.Where("id = ? AND family_id = ?", id, familyID).First(&oldTx).Error; err != nil {
+			// Блокуємо стару транзакцію для оновлення
+			if err := txDB.Set("gorm:query_option", "FOR UPDATE").Where("id = ? AND family_id = ?", id, familyID).First(&oldTx).Error; err != nil {
 				return err
+			}
+
+			// Перевірка рахунку старої транзакції
+			if oldTx.AccountID != "" {
+				var oldAccount models.Account
+				if err := txDB.Set("gorm:query_option", "FOR UPDATE").First(&oldAccount, "id = ?", oldTx.AccountID).Error; err == nil {
+					// Якщо транзакція банківська (має ExternalID), забороняємо будь-які зміни через цей метод
+					// Банківські транзакції мають оновлюватись тільки через спеціальні механізми (напр. зміна категорії)
+					if oldAccount.IsSynced && oldTx.ExternalID != "" {
+						return fmt.Errorf("🚫 Це банківська транзакція. Ручне редагування основних полів заборонено.")
+					}
+				}
 			}
 
 			// Якщо валюти немає в старій транзакції, спробуємо дістати з рахунку
@@ -404,9 +433,15 @@ import (
 			var newCurrency string
 			if newData.AccountID != "" {
 				var newAccount models.Account
-				if err := txDB.Select("currency").First(&newAccount, "id = ?", newData.AccountID).Error; err != nil {
+				if err := txDB.Set("gorm:query_option", "FOR UPDATE").First(&newAccount, "id = ?", newData.AccountID).Error; err != nil {
 					return err
 				}
+				
+				// Перевірка: чи не намагаємось перенести на синхронізований рахунок
+				if newAccount.IsSynced && newData.ExternalID == "" {
+					return fmt.Errorf("🚫 Не можна переносити транзакцію на автоматичний рахунок (%s).", newAccount.Name)
+				}
+				
 				newCurrency = newAccount.Currency
 			} else {
 				newCurrency = oldTx.Currency
@@ -494,6 +529,21 @@ import (
 	// === DELETE ===
 	func (r *txRepo) Delete(tx *models.Transaction, relatedTx *models.Transaction) error {
 		return r.db.Transaction(func(txDB *gorm.DB) error {
+			// Блокуємо основну транзакцію
+			if err := txDB.Set("gorm:query_option", "FOR UPDATE").First(tx).Error; err != nil {
+				return err
+			}
+
+			// Перевірка: заборона видалення банківських транзакцій
+			if tx.AccountID != "" {
+				var account models.Account
+				if err := txDB.Set("gorm:query_option", "FOR UPDATE").First(&account, "id = ?", tx.AccountID).Error; err == nil {
+					if account.IsSynced && tx.ExternalID != "" {
+						return fmt.Errorf("🚫 Це банківська транзакція. Видалення заборонено.")
+					}
+				}
+			}
+
 			now := time.Now().UnixMilli()
 			if err := txDB.Model(tx).Update("deleted_at", now).Error; err != nil {
 				return err

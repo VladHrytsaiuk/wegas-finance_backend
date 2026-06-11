@@ -84,25 +84,6 @@ func NewTransactionService(db *gorm.DB, repo repositories.TransactionRepository,
 	}
 }
 func (s *txService) Create(input CreateTransactionInput, files []*multipart.FileHeader, user *models.User) (string, error) {
-	// 👇 ПЕРЕВІРКА: Блокуємо створення в синхронізованих рахунках
-	var account models.Account
-	if err := s.db.First(&account, "id = ?", input.AccountID).Error; err != nil {
-		return "", errors.New("account not found")
-	}
-	if account.IsSynced {
-		return "", errors.New("🚫 Цей рахунок синхронізується автоматично. Ручне додавання заборонено.")
-	}
-
-	if input.Type == "transfer" && input.TargetAccountID != "" {
-		var targetAccount models.Account
-		if err := s.db.First(&targetAccount, "id = ?", input.TargetAccountID).Error; err == nil {
-			if targetAccount.IsSynced {
-				return "", errors.New("🚫 Рахунок отримувача синхронізується. Ручні перекази на нього заборонено.")
-			}
-		}
-	}
-	// 👆 КІНЕЦЬ ПЕРЕВІРКИ
-
 	now := time.Now().UnixMilli()
 	userID := user.ID
 
@@ -277,11 +258,6 @@ func (s *txService) Update(id string, input CreateTransactionInput, user *models
 		return errors.New("access denied")
 	}
 
-	var account models.Account
-	if err := s.db.First(&account, "id = ?", oldTx.AccountID).Error; err != nil {
-		return errors.New("account not found")
-	}
-
 	// Створюємо об'єкт для оновлення
 	updatedTx := &models.Transaction{
 		AccountID:      input.AccountID,
@@ -297,23 +273,6 @@ func (s *txService) Update(id string, input CreateTransactionInput, user *models
 		
 		// 🔥 Не забуваємо оновлювати пробіг в самій транзакції
 		Mileage:        input.Mileage, 
-	}
-
-	if account.IsSynced {
-		// Якщо рахунок синхронізований, критичні поля не міняємо
-		updatedTx.Amount = oldTx.Amount
-		updatedTx.Date = oldTx.Date
-		updatedTx.AccountID = oldTx.AccountID
-		updatedTx.Type = oldTx.Type
-	} else {
-		if input.AccountID != oldTx.AccountID {
-			var newAccount models.Account
-			if err := s.db.First(&newAccount, "id = ?", input.AccountID).Error; err == nil {
-				if newAccount.IsSynced {
-					return errors.New("🚫 Не можна переносити транзакцію на автоматичний рахунок.")
-				}
-			}
-		}
 	}
 
 	var items []models.TransactionItem
@@ -363,15 +322,6 @@ func (s *txService) Delete(id string, user *models.User) error {
 	if user.RoleID == "child" && tx.UserID != user.ID {
 		return errors.New("access denied")
 	}
-
-	// 👇 ПЕРЕВІРКА: Блокуємо видалення
-	var account models.Account
-	if err := s.db.First(&account, "id = ?", tx.AccountID).Error; err == nil {
-		if account.IsSynced {
-			return errors.New("🚫 Це банківська транзакція. Видалення заборонено.")
-		}
-	}
-	// 👆
 
 	s.DeleteReceipt(id, user)
 

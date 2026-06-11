@@ -89,7 +89,7 @@ type StorageService interface {
 | Статус | Пріоритет | Компонент | Завдання |
 | :---: | :--- | :--- | :--- |
 | [x] | **Критично** 🚨 | `MonobankService` | Замінити глобальну `currentSyncStatus` на `syncMap` з Mutex. |
-| [ ] | **Критично** 🚨 | `ACID` | Перенести бізнес-валідації (CheckSynced) всередину транзакції репозиторію. |
+| [x] | **Критично** 🚨 | `ACID` | Перенести бізнес-валідації (CheckSynced) всередину транзакції репозиторію. |
 | [ ] | **High** 🏗️ | `Architecture` | Створити `StorageService` для роботи з файлами (S3/Local). |
 | [ ] | **Local-First** 🏗️ | `models.Base` | Додати поля `ServerVersion` та `ClientUpdatedAt`. |
 | [ ] | **Scalability** 📈 | `Monobank` | Реалізувати Webhook ендпоінт для Monobank. |
