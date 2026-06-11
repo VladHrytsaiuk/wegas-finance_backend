@@ -174,6 +174,8 @@ func startApp() {
 	wsHub := utils.NewWSHub()
 	go wsHub.Run()
 
+	storageService := services.NewLocalStorageService("./uploads")
+
 	importService := services.NewImportService(db)
 	currencyService := services.NewCurrencyService(db)
 	categoryService := services.NewCategoryService(categoryRepo)
@@ -182,11 +184,11 @@ func startApp() {
 	authService := services.NewAuthService(userRepo, cfg.SecretKey, cfg.RegistrationCode)
 	accountService := services.NewAccountService(accountRepo, db)
 	tagService := services.NewTagService(tagRepo)
-	txService := services.NewTransactionService(db, txRepo, cpRepo, assetRepo)
+	txService := services.NewTransactionService(db, txRepo, cpRepo, assetRepo, storageService)
 	exportService := services.NewExportService(exportRepo)
 	roleService := services.NewRoleService(roleRepo)
 	statsService := services.NewStatsService(statsRepo, currencyService)
-	assetService := services.NewAssetService(assetRepo, txRepo)
+	assetService := services.NewAssetService(assetRepo, txRepo, storageService)
 	utilityService := services.NewUtilityService(utilityRepo, txRepo, assetRepo)
 	monobankService := services.NewMonobankService(db, txService, accountRepo)
 	goalService := services.NewGoalService(goalRepo, accountRepo, currencyService)

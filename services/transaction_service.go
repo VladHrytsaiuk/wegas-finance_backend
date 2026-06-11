@@ -2,11 +2,7 @@ package services
 
 import (
 	"errors"
-	"image"
-	"image/jpeg"
 	"mime/multipart"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -69,18 +65,26 @@ type TransactionService interface {
 }
 
 type txService struct {
-	db     *gorm.DB
-	repo   repositories.TransactionRepository
-	cpRepo repositories.CounterpartyRepository
+	db        *gorm.DB
+	repo      repositories.TransactionRepository
+	cpRepo    repositories.CounterpartyRepository
 	assetRepo repositories.AssetRepository
+	storage   StorageService
 }
 
-func NewTransactionService(db *gorm.DB, repo repositories.TransactionRepository, cpRepo repositories.CounterpartyRepository, assetRepo repositories.AssetRepository,) TransactionService {
+func NewTransactionService(
+	db *gorm.DB,
+	repo repositories.TransactionRepository,
+	cpRepo repositories.CounterpartyRepository,
+	assetRepo repositories.AssetRepository,
+	storage StorageService,
+) TransactionService {
 	return &txService{
-		db:     db,
-		repo:   repo,
-		cpRepo: cpRepo,
+		db:        db,
+		repo:      repo,
+		cpRepo:    cpRepo,
 		assetRepo: assetRepo,
+		storage:   storage,
 	}
 }
 func (s *txService) Create(input CreateTransactionInput, files []*multipart.FileHeader, user *models.User) (string, error) {
@@ -156,7 +160,7 @@ func (s *txService) Create(input CreateTransactionInput, files []*multipart.File
 
 		if len(files) > 0 {
 			for i, fileHeader := range files {
-				path, err := s.saveFile(fileHeader, "assets")
+				path, err := s.storage.SaveImage(fileHeader, "assets")
 				if err == nil {
 					newAsset.Photos = append(newAsset.Photos, models.AssetPhoto{
 						Base:    models.Base{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now, IsSynced: true},
@@ -193,7 +197,7 @@ func (s *txService) Create(input CreateTransactionInput, files []*multipart.File
 
 	if newAsset == nil && len(files) > 0 {
 		for i, fileHeader := range files {
-			path, err := s.saveFile(fileHeader, "receipts")
+			path, err := s.storage.SaveImage(fileHeader, "receipts")
 			if err == nil {
 				transaction.Photos = append(transaction.Photos, models.TransactionPhoto{
 					Base:          models.Base{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now, IsSynced: true},
@@ -335,42 +339,6 @@ func (s *txService) Delete(id string, user *models.User) error {
 	return s.repo.Delete(tx, relatedTx)
 }
 
-func (s *txService) saveFile(fileHeader *multipart.FileHeader, folder string) (string, error) {
-  file, err := fileHeader.Open()
-  if err != nil {
-    return "", err
-  }
-  defer file.Close()
-
-  uploadDir := "./uploads/" + folder
-  if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
-    return "", err
-  }
-
-  // Оскільки ми примусово зберігаємо як JPEG, відкидаємо старе розширення
-  filename := uuid.NewString() + ".jpg"
-  filePath := filepath.Join(uploadDir, filename)
-
-  out, err := os.Create(filePath)
-  if err != nil {
-    return "", err
-  }
-  defer out.Close()
-
-  // 1. Декодуємо картинку (щоб Go прочитав пікселі)
-  img, _, err := image.Decode(file)
-  if err != nil {
-    return "", errors.New("invalid image format")
-  }
-
-  // 2. Зберігаємо у файл зі стисненням якості 80%
-  if err := jpeg.Encode(out, img, &jpeg.Options{Quality: 80}); err != nil {
-    return "", err
-  }
-
-  return "/uploads/" + folder + "/" + filename, nil
-}
-
 func (s *txService) GetAll(filter repositories.TransactionFilter, user *models.User) ([]models.Transaction, int64, error) {
 	if user.RoleID == "child" {
 		filter.UserID = user.ID
@@ -389,8 +357,6 @@ func (s *txService) GetByID(id string, user *models.User) (*models.Transaction, 
 	return tx, nil
 }
 
-
-
 func (s *txService) UploadReceipt(txID string, file multipart.File, header *multipart.FileHeader, user *models.User) (string, error) {
 	tx, err := s.repo.GetByID(txID, user.FamilyID)
 	if err != nil {
@@ -399,7 +365,7 @@ func (s *txService) UploadReceipt(txID string, file multipart.File, header *mult
 	if user.RoleID == "child" && tx.UserID != user.ID {
 		return "", errors.New("access denied")
 	}
-	path, err := s.saveFile(header, "receipts")
+	path, err := s.storage.SaveImage(header, "receipts")
 	if err != nil {
 		return "", err
 	}
@@ -419,11 +385,11 @@ func (s *txService) DeleteReceipt(txID string, user *models.User) error {
 	}
 	for _, photo := range tx.Photos {
 		if photo.Path != "" {
-			_ = os.Remove("." + photo.Path)
+			_ = s.storage.DeleteFile(photo.Path)
 		}
 	}
 	if tx.ReceiptImg != "" {
-		_ = os.Remove("." + tx.ReceiptImg)
+		_ = s.storage.DeleteFile(tx.ReceiptImg)
 	}
 	return s.repo.DeleteAllPhotos(txID)
 }
@@ -441,7 +407,7 @@ func (s *txService) DeletePhoto(photoID string, user *models.User) error {
 		return errors.New("access denied")
 	}
 	if photo.Path != "" {
-		_ = os.Remove("." + photo.Path)
+		_ = s.storage.DeleteFile(photo.Path)
 	}
 	return s.repo.DeletePhotoByID(photoID)
 }
