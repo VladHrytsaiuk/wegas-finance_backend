@@ -92,7 +92,7 @@ type StorageService interface {
 | [x] | **Критично** 🚨 | `ACID` | Перенести бізнес-валідації (CheckSynced) всередину транзакції репозиторію. |
 | [x] | **High** 🏗️ | `Architecture` | Створити `StorageService` для роботи з файлами (S3/Local). |
 | [x] | **Local-First** 🏗️ | `models.Base` | Додати поля `ServerVersion` та `ClientUpdatedAt`. |
-| [ ] | **Scalability** 📈 | `Monobank` | Реалізувати Webhook ендпоінт для Monobank. |
+| [x] | **Scalability** 📈 | `Monobank` | Реалізувати Webhook ендпоінт для Monobank. |
 | [ ] | **Scalability** 📈 | `Monobank` | Оптимізувати `time.Sleep` у фоновій синхронізації (використати чергу або лімітер). |
 | [ ] | **Testing** 🧪 | `Global` | Запровадити `Clock` інтерфейс для роботи з часом. |
 

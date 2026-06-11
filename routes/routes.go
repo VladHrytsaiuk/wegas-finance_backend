@@ -56,6 +56,7 @@ func SetupRoutes(r *gin.Engine, c AppControllers, uploadsDir string, secretKey s
 		api.POST("/users", c.Auth.Register)
 		api.POST("/login", c.Auth.Login)
 		api.POST("/feedback", c.Feedback.Submit)
+		api.POST("/monobank/webhook", c.Monobank.Webhook)
 
 		// === PROTECTED ===
 		protected := api.Group("/")

@@ -326,3 +326,32 @@ func (ctrl *MonobankController) GetStatus(c *gin.Context) {
 			"updated_transactions_count": updatedCount,
 		})
 	}
+
+	// Webhook godoc
+	// @Summary Monobank Webhook
+	// @Description Endpoint for Monobank to push new transactions.
+	// @Tags Monobank
+	// @Accept json
+	// @Produce json
+	// @Param body body services.MonoWebhookPayload true "Webhook payload"
+	// @Success 200 {string} string "ok"
+	// @Failure 400 {object} map[string]string "Invalid input"
+	// @Failure 500 {object} map[string]string "Internal server error"
+	// @Router /monobank/webhook [post]
+	func (ctrl *MonobankController) Webhook(c *gin.Context) {
+		var payload services.MonoWebhookPayload
+		if err := c.ShouldBindJSON(&payload); err != nil {
+			// Monobank потребує 200 навіть при помилці, щоб не пробувати нескінченно, 
+			// але для дебагу ми можемо логувати або повертати 400.
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		if err := ctrl.service.ProcessWebhook(payload); err != nil {
+			fmt.Printf("❌ Monobank Webhook Error: %v\n", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.String(http.StatusOK, "ok")
+	}

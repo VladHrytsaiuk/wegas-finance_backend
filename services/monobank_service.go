@@ -70,6 +70,15 @@ type RawDataPayload struct {
 	Type      string   `json:"type"`
 }
 
+// === Webhook Payload ===
+type MonoWebhookPayload struct {
+	Type string `json:"type"`
+	Data struct {
+		Account       string          `json:"account"`
+		StatementItem MonoTransaction `json:"statementItem"`
+	} `json:"data"`
+}
+
 // === Service ===
 
 type MonobankService struct {
@@ -755,4 +764,83 @@ func (s *MonobankService) GlobalResyncCounterparties() (int, error) {
   }
 
   return updatedCount, nil
+}
+
+// ProcessWebhook обробляє вхідну транзакцію від Monobank
+func (s *MonobankService) ProcessWebhook(payload MonoWebhookPayload) error {
+	if payload.Type != "StatementItem" {
+		return nil // Ігноруємо інші типи (наприклад, перевірка з'єднання)
+	}
+
+	mTx := payload.Data.StatementItem
+	externalAccountID := payload.Data.Account
+
+	// 1. Знаходимо маппінг рахунку
+	var mapping models.BankAccountMapping
+	if err := s.db.Where("external_id = ? AND is_enabled = true", externalAccountID).First(&mapping).Error; err != nil {
+		return fmt.Errorf("account mapping not found or disabled: %w", err)
+	}
+
+	// 2. Знаходимо підключення та юзера
+	var conn models.BankConnection
+	if err := s.db.First(&conn, "id = ?", mapping.ConnectionID).Error; err != nil {
+		return fmt.Errorf("connection not found: %w", err)
+	}
+
+	var user models.User
+	if err := s.db.First(&user, "id = ?", conn.UserID).Error; err != nil {
+		return fmt.Errorf("user not found: %w", err)
+	}
+
+	// 3. Перевірка на дублікат
+	var exists int64
+	s.db.Model(&models.Transaction{}).
+		Where("external_id = ? AND account_id = ?", mTx.ID, mapping.InternalAccountID).
+		Count(&exists)
+	if exists > 0 {
+		return nil // Вже є в базі
+	}
+
+	// 4. Підготовка транзакції
+	txType := "income"
+	if mTx.Amount < 0 {
+		txType = "expense"
+	}
+
+	// Категорія
+	var categories []models.Category
+	categoryMap := make(map[string]string)
+	if err := s.db.Where("family_id = ?", user.FamilyID).Find(&categories).Error; err == nil {
+		for _, cat := range categories {
+			exactKey := fmt.Sprintf("%s_%s", cat.Type, strings.ToLower(cat.Name))
+			categoryMap[exactKey] = cat.ID
+			categoryMap[strings.ToLower(cat.Name)] = cat.ID
+		}
+	}
+
+	normalizedName := utils.NormalizeCounterparty(mTx.Description)
+	mccStr := strconv.Itoa(mTx.Mcc)
+	categoryID := utils.PredictCategoryID(mTx.Description, normalizedName, mccStr, txType, categoryMap)
+
+	input := CreateTransactionInput{
+		AccountID:        mapping.InternalAccountID,
+		Amount:           mTx.Amount,
+		Date:             mTx.Time * 1000,
+		Note:             mTx.Description,
+		Type:             txType,
+		CategoryID:       categoryID,
+		CounterpartyName: normalizedName,
+		ExternalID:       mTx.ID,
+	}
+
+	// 5. Створюємо транзакцію
+	_, err := s.txService.Create(input, nil, &user)
+	if err != nil {
+		return fmt.Errorf("failed to create transaction from webhook: %w", err)
+	}
+
+	// 6. Оновлюємо баланс рахунку
+	s.db.Model(&models.Account{}).Where("id = ?", mapping.InternalAccountID).Update("balance", mTx.Balance)
+
+	return nil
 }
