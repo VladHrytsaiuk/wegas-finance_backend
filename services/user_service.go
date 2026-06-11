@@ -331,6 +331,27 @@ func (s *userService) separateUserFromFamily(targetUser *models.User, oldFamilyI
 			}
 		}
 
+		// 🔥 НОВЕ: Оновлюємо ParentID для клонованих категорій та контрагентів
+		// (щоб зберегти деревоподібну структуру в новій сім'ї)
+		
+		for _, newID := range categoryMap {
+			var cat models.Category
+			if err := tx.First(&cat, "id = ?", newID).Error; err == nil && cat.ParentID != "" {
+				if newParentID, ok := categoryMap[cat.ParentID]; ok {
+					tx.Model(&cat).Update("parent_id", newParentID)
+				}
+			}
+		}
+
+		for _, newID := range counterpartyMap {
+			var cp models.Counterparty
+			if err := tx.First(&cp, "id = ?", newID).Error; err == nil && cp.ParentID != "" {
+				if newParentID, ok := counterpartyMap[cp.ParentID]; ok {
+					tx.Model(&cp).Update("parent_id", newParentID)
+				}
+			}
+		}
+
 		// 3. ОНОВЛЮЄМО КОРИСТУВАЧА
 		if err := tx.Model(&models.User{}).Where("id = ?", targetUser.ID).Updates(map[string]interface{}{
 			"family_id":  newFamily.ID,

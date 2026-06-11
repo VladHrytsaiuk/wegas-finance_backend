@@ -126,6 +126,10 @@ func (s *familyJoinService) JoinFamily(userID string, code string) (*models.Fami
 
 		// Б) Таблиці без user_id з дедуплікацією (мігруємо все, що належало старій персональній сім'ї)
 		if oldFamilyID != "" {
+			// Карти для мапінгу ID (oldID -> newID) для збереження ієрархії
+			categoryMap := make(map[string]string)
+			counterpartyMap := make(map[string]string)
+
 			// 1. Дедуплікація Категорій Транзакцій
 			var oldCategories []models.Category
 			if err := tx.Where("family_id = ? AND deleted_at IS NULL", oldFamilyID).Find(&oldCategories).Error; err == nil {
@@ -137,13 +141,23 @@ func (s *familyJoinService) JoinFamily(userID string, code string) (*models.Fami
 						Where("deleted_at IS NULL").First(&existingCat).Error
 
 					if err == nil {
-						// Знайшли дублікат - переприв'язуємо транзакції та елементи чеків
+						// Знайшли дублікат
+						categoryMap[oldCat.ID] = existingCat.ID
 						tx.Table("transactions").Where("category_id = ?", oldCat.ID).Update("category_id", existingCat.ID)
 						tx.Table("transaction_items").Where("category_id = ?", oldCat.ID).Update("category_id", existingCat.ID)
 						tx.Delete(&oldCat)
 					} else {
 						// Не знайшли - просто переносимо
+						categoryMap[oldCat.ID] = oldCat.ID
 						tx.Model(&oldCat).Update("family_id", joinCode.FamilyID)
+					}
+				}
+				// Оновлюємо ParentID для категорій, що переїхали
+				for _, oldCat := range oldCategories {
+					if oldCat.ParentID != "" {
+						if newParentID, ok := categoryMap[oldCat.ParentID]; ok {
+							tx.Model(&models.Category{}).Where("id = ?", categoryMap[oldCat.ID]).Update("parent_id", newParentID)
+						}
 					}
 				}
 			}
@@ -176,7 +190,8 @@ func (s *familyJoinService) JoinFamily(userID string, code string) (*models.Fami
 						Where("deleted_at IS NULL").First(&existingCP).Error
 
 					if err == nil {
-						// Переприв'язуємо
+						// Знайшли дублікат
+						counterpartyMap[oldCP.ID] = existingCP.ID
 						tx.Table("transactions").Where("counterparty_id = ?", oldCP.ID).Update("counterparty_id", existingCP.ID)
 						tx.Table("utility_meters").Where("counterparty_id = ?", oldCP.ID).Update("counterparty_id", existingCP.ID)
 
@@ -195,7 +210,17 @@ func (s *familyJoinService) JoinFamily(userID string, code string) (*models.Fami
 						}
 						tx.Delete(&oldCP)
 					} else {
+						// Не знайшли - переносимо
+						counterpartyMap[oldCP.ID] = oldCP.ID
 						tx.Model(&oldCP).Update("family_id", joinCode.FamilyID)
+					}
+				}
+				// Оновлюємо ParentID для контрагентів
+				for _, oldCP := range oldCPs {
+					if oldCP.ParentID != "" {
+						if newParentID, ok := counterpartyMap[oldCP.ParentID]; ok {
+							tx.Model(&models.Counterparty{}).Where("id = ?", counterpartyMap[oldCP.ID]).Update("parent_id", newParentID)
+						}
 					}
 				}
 			}
