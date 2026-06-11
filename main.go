@@ -50,6 +50,7 @@ func (p *program) Stop(s service.Service) error {
 
 func main() {
 
+
 ////////
 
 // ex, err := os.Executable()
@@ -138,7 +139,7 @@ func startApp() {
     &models.ShoppingItem{},
 		&models.WishlistGroup{},
 		&models.WishlistItem{},
-		
+		&models.FamilyJoinCode{},
 	)
 	if err != nil {
 		log.Fatal("❌ Migration error:", err)
@@ -166,6 +167,10 @@ func startApp() {
 	storageTypeRepo := repositories.NewStorageTypeRepository(db)
 	shoppingRepo := repositories.NewShoppingRepo(db)
 	wishlistRepo := repositories.NewWishlistRepo(db) // <--- 2. ДОДАНО REPO
+	familyJoinRepo := repositories.NewFamilyJoinRepository(db)
+
+	wsHub := utils.NewWSHub()
+	go wsHub.Run()
 
 	importService := services.NewImportService(db)
 	currencyService := services.NewCurrencyService(db)
@@ -187,6 +192,7 @@ func startApp() {
 	feedbackService := services.NewFeedbackService(cfg.TgBotToken, cfg.TgChatID)
 	shoppingService := services.NewShoppingService(shoppingRepo)
 	wishlistService := services.NewWishlistService(wishlistRepo) // <--- 3. ДОДАНО SERVICE
+	familyJoinService := services.NewFamilyJoinService(familyJoinRepo, userRepo, wsHub)
 
 	startSchedulers(db, goalService, currencyService, monobankService)
 
@@ -203,6 +209,8 @@ func startApp() {
 		Feedback: controllers.NewFeedbackController(feedbackService),
 		Shopping: controllers.NewShoppingController(shoppingService),
 		Wishlist:     controllers.NewWishlistController(wishlistService), // <--- 4. ДОДАНО КОНТРОЛЕР
+		Family:       controllers.NewFamilyController(familyJoinService),
+		WS:           controllers.NewWSController(wsHub),
 	}
 
 	r := gin.Default()

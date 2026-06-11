@@ -35,8 +35,8 @@ type AppControllers struct {
 	Feedback     *controllers.FeedbackController
 	Shopping     *controllers.ShoppingController
 	Wishlist     *controllers.WishlistController
-	
-	
+	Family       *controllers.FamilyController
+	WS           *controllers.WSController
 }
 
 func SetupRoutes(r *gin.Engine, c AppControllers, uploadsDir string, secretKey string) {
@@ -61,6 +61,8 @@ func SetupRoutes(r *gin.Engine, c AppControllers, uploadsDir string, secretKey s
 		protected := api.Group("/")
 		protected.Use(middlewares.AuthMiddleware(secretKey))
 		{
+			protected.GET("/ws", c.WS.HandleWS)
+
 			// --- DASHBOARD ---
 			protected.GET("/dashboard/stats", c.Dashboard.GetStats)
 			protected.GET("/dashboard/top", c.Dashboard.GetTopStats)
@@ -81,6 +83,8 @@ func SetupRoutes(r *gin.Engine, c AppControllers, uploadsDir string, secretKey s
 			// --- FAMILY ---
 			protected.GET("/users", c.User.GetFamilyMembers)
 			protected.POST("/family/users", c.User.AddMember)
+			protected.POST("/families/:id/generate-code", c.Family.GenerateCodeHandler)
+			protected.POST("/families/join", c.Family.JoinFamilyHandler)
 			protected.PUT("/users/:id", c.User.UpdateUser)
 			protected.DELETE("/users/:id", c.User.DeleteMember)
 
