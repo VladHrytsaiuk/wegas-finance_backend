@@ -269,15 +269,34 @@ import (
 		}
 	}
 
-	// 🔥 2. ГЛОБАЛЬНИЙ ПОШУК (Виправлено ILIKE та додано поля)
+	// 🔥 2. ГЛОБАЛЬНИЙ ПОШУК (Покращено підтримку Кирилиці)
 	if f.Search != "" {
-		searchPattern := "%" + f.Search + "%"
-		// SQLite LIKE за замовчуванням Case-Insensitive для ASCII, 
-		// але ми шукаємо по всіх текстових полях через OR
-		query = query.Where(
-			"(transactions.note LIKE ? OR categories.name LIKE ? OR accounts.name LIKE ? OR counterparties.name LIKE ?)",
-			searchPattern, searchPattern, searchPattern, searchPattern,
-		)
+		search := f.Search
+		lower := strings.ToLower(search)
+		upper := strings.ToUpper(search)
+		
+		// Створюємо список паттернів для пошуку (оригінал + нижній + верхній регістр)
+		// Це дозволяє обійти обмеження SQLite LIKE, який не є Case-Insensitive для Unicode
+		patterns := []string{"%" + search + "%"}
+		if lower != search {
+			patterns = append(patterns, "%" + lower + "%")
+		}
+		if upper != search && upper != lower {
+			patterns = append(patterns, "%" + upper + "%")
+		}
+
+		var conditions []string
+		var args []interface{}
+		columns := []string{"transactions.note", "categories.name", "accounts.name", "counterparties.name"}
+		
+		for _, col := range columns {
+			for _, p := range patterns {
+				conditions = append(conditions, col+" LIKE ?")
+				args = append(args, p)
+			}
+		}
+		
+		query = query.Where("("+strings.Join(conditions, " OR ")+")", args...)
 	}
 
 	if f.DateFrom > 0 {

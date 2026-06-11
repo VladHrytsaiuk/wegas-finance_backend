@@ -95,7 +95,11 @@ func (r *cpRepo) GetByName(name string, familyID string) (*models.Counterparty, 
     // Спробуємо знайти (додав TrimSpace про всяк випадок)
     cleanName := strings.TrimSpace(name)
     
-    err := r.db.Where("family_id = ? AND name = ?", familyID, cleanName).First(&cp).Error
+    // 🔥 ВИПРАВЛЕНО: Case-insensitive пошук для Unicode (Кирилиця) в SQLite
+    // Стандартний LOWER() в SQLite не працює з кирилицею, тому перевіряємо основні варіанти
+    lowerName := strings.ToLower(cleanName)
+    upperName := strings.ToUpper(cleanName)
+    err := r.db.Where("family_id = ? AND (name = ? OR name = ? OR name = ?)", familyID, cleanName, lowerName, upperName).First(&cp).Error
 
     if err != nil {
         fmt.Printf("❌ FAILED to find: %v\n", err) // Покаже, чому не знайшло

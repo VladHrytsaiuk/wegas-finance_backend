@@ -231,7 +231,7 @@ import (
 	var longestKeyLen int
 
 	for key, officialName := range rules {
-		if strings.Contains(upperName, key) {
+		if strings.Contains(upperName, strings.ToUpper(key)) {
 			// Якщо знайшли співпадіння, перевіряємо чи воно довше за попереднє
 			// Наприклад: "UKLON" (5) > "KLO" (3). Перемагає UKLON.
 			if len(key) > longestKeyLen {
