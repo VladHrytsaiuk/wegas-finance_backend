@@ -26,3 +26,24 @@ func (c *realClock) NowUnixMilli() int64 {
 func (c *realClock) NowUnixNano() int64 {
 	return time.Now().UnixNano()
 }
+
+// MockClock - реалізація для тестів
+type MockClock struct {
+	FixedTime time.Time
+}
+
+func NewMockClock(t time.Time) *MockClock {
+	return &MockClock{FixedTime: t}
+}
+
+func (c *MockClock) Now() time.Time {
+	return c.FixedTime
+}
+
+func (c *MockClock) NowUnixMilli() int64 {
+	return c.FixedTime.UnixMilli()
+}
+
+func (c *MockClock) NowUnixNano() int64 {
+	return c.FixedTime.UnixNano()
+}
