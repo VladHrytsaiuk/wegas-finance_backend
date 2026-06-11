@@ -13,10 +13,12 @@ type UserRepository interface {
 	GetByID(id string) (*models.User, error)
 	Update(user *models.User) error
 	GetFamilyMembers(familyID string) ([]models.User, error)
+	CountFamilyMembers(familyID string) (int64, error)
 	Delete(id string) error
 
 	CreateFamily(family *models.Family) error
 	GetFamilyByID(id string) (*models.Family, error)
+	DeleteFamily(id string) error
 	GetDB() *gorm.DB
 }
 
@@ -58,6 +60,12 @@ func (r *userRepo) GetFamilyMembers(familyID string) ([]models.User, error) {
 	return users, err
 }
 
+func (r *userRepo) CountFamilyMembers(familyID string) (int64, error) {
+	var count int64
+	err := r.db.Model(&models.User{}).Where("family_id = ? AND deleted_at IS NULL", familyID).Count(&count).Error
+	return count, err
+}
+
 func (r *userRepo) Delete(id string) error {
 	return r.db.Model(&models.User{}).
 		Where("id = ?", id).
@@ -74,6 +82,10 @@ func (r *userRepo) GetFamilyByID(id string) (*models.Family, error) {
 	var family models.Family
 	err := r.db.Where("id = ?", id).First(&family).Error
 	return &family, err
+}
+
+func (r *userRepo) DeleteFamily(id string) error {
+	return r.db.Where("id = ?", id).Delete(&models.Family{}).Error
 }
 
 func (r *userRepo) GetDB() *gorm.DB {

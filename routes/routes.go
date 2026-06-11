@@ -83,6 +83,7 @@ func SetupRoutes(r *gin.Engine, c AppControllers, uploadsDir string, secretKey s
 			// --- FAMILY ---
 			protected.GET("/users", c.User.GetFamilyMembers)
 			protected.POST("/family/users", c.User.AddMember)
+			protected.POST("/family/leave", c.User.LeaveFamily)
 			protected.POST("/families/:id/generate-code", c.Family.GenerateCodeHandler)
 			protected.POST("/families/join", c.Family.JoinFamilyHandler)
 			protected.PUT("/users/:id", c.User.UpdateUser)

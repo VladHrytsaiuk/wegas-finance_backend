@@ -9,7 +9,7 @@ type FamilyJoinRepository interface {
 	CreateCode(code *models.FamilyJoinCode) error
 	GetCode(code string) (*models.FamilyJoinCode, error)
 	DeleteCode(code string) error
-	UpdateUserFamily(userID string, familyID string) error
+	UpdateUserFamily(userID string, familyID string, roleID string) error
 }
 
 type familyJoinRepo struct {
@@ -36,6 +36,9 @@ func (r *familyJoinRepo) DeleteCode(code string) error {
 	return r.db.Where("code = ?", code).Delete(&models.FamilyJoinCode{}).Error
 }
 
-func (r *familyJoinRepo) UpdateUserFamily(userID string, familyID string) error {
-	return r.db.Model(&models.User{}).Where("id = ?", userID).Update("family_id", familyID).Error
+func (r *familyJoinRepo) UpdateUserFamily(userID string, familyID string, roleID string) error {
+	return r.db.Model(&models.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"family_id": familyID,
+		"role_id":   roleID,
+	}).Error
 }

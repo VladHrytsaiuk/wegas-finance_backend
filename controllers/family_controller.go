@@ -20,12 +20,22 @@ func NewFamilyController(service services.FamilyJoinService) *FamilyController {
 // @Tags families
 // @Security BearerAuth
 // @Param id path string true "Family ID"
+// @Param request body map[string]string true "Role ID"
 // @Success 200 {object} map[string]string
 // @Router /api/families/{id}/generate-code [post]
 func (ctrl *FamilyController) GenerateCodeHandler(c *gin.Context) {
 	familyID := c.Param("id")
 	if familyID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "family ID is required"})
+		return
+	}
+
+	var req struct {
+		RoleID string `json:"role_id" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "role_id is required"})
 		return
 	}
 
@@ -37,7 +47,7 @@ func (ctrl *FamilyController) GenerateCodeHandler(c *gin.Context) {
 		return
 	}
 
-	code, err := ctrl.service.GenerateCode(familyID)
+	code, err := ctrl.service.GenerateCode(familyID, req.RoleID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

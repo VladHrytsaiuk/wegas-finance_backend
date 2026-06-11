@@ -188,7 +188,27 @@ func (h *UserController) DeleteMember(c *gin.Context) {
 		handleUserError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "User deleted"})
+	c.JSON(http.StatusOK, gin.H{"message": "User removed and moved to personal space"})
+}
+
+// LeaveFamily godoc
+// @Summary Leave current family
+// @Description Leaves the current family and moves to a personal space.
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {object} map[string]string "Left family"
+// @Failure 400 {object} map[string]string "Invalid request"
+// @Router /family/leave [post]
+func (h *UserController) LeaveFamily(c *gin.Context) {
+	currentUser := c.MustGet("user").(*models.User)
+
+	if err := h.service.LeaveFamily(currentUser); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Successfully left the family"})
 }
 
 type UpdateUserJSON struct {

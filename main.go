@@ -140,6 +140,8 @@ func startApp() {
 		&models.WishlistGroup{},
 		&models.WishlistItem{},
 		&models.FamilyJoinCode{},
+		&models.MedicalRecord{},
+		&models.MedicalFile{},
 	)
 	if err != nil {
 		log.Fatal("❌ Migration error:", err)
@@ -176,7 +178,7 @@ func startApp() {
 	currencyService := services.NewCurrencyService(db)
 	categoryService := services.NewCategoryService(categoryRepo)
 	cpService := services.NewCounterpartyService(cpRepo)
-	userService := services.NewUserService(userRepo)
+	userService := services.NewUserService(userRepo, wsHub, db)
 	authService := services.NewAuthService(userRepo, cfg.SecretKey, cfg.RegistrationCode)
 	accountService := services.NewAccountService(accountRepo, db)
 	tagService := services.NewTagService(tagRepo)
@@ -192,7 +194,7 @@ func startApp() {
 	feedbackService := services.NewFeedbackService(cfg.TgBotToken, cfg.TgChatID)
 	shoppingService := services.NewShoppingService(shoppingRepo)
 	wishlistService := services.NewWishlistService(wishlistRepo) // <--- 3. ДОДАНО SERVICE
-	familyJoinService := services.NewFamilyJoinService(familyJoinRepo, userRepo, wsHub)
+	familyJoinService := services.NewFamilyJoinService(familyJoinRepo, userRepo, wsHub, db)
 
 	startSchedulers(db, goalService, currencyService, monobankService)
 

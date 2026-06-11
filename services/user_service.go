@@ -2,12 +2,14 @@ package services
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/repositories"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/utils"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type CreateUserInput struct {
@@ -28,14 +30,21 @@ type UserService interface {
 	DeleteMember(actor *models.User, targetID string) error
 	// UpdateUser приймає ініціатора
 	UpdateUser(actor *models.User, targetID string, input CreateUserInput) (*models.User, error)
+	LeaveFamily(user *models.User) error
 }
 
 type userService struct {
-	repo repositories.UserRepository
+	repo  repositories.UserRepository
+	wsHub *utils.WSHub
+	db    *gorm.DB
 }
 
-func NewUserService(repo repositories.UserRepository) UserService {
-	return &userService{repo: repo}
+func NewUserService(repo repositories.UserRepository, wsHub *utils.WSHub, db *gorm.DB) UserService {
+	return &userService{
+		repo:  repo,
+		wsHub: wsHub,
+		db:    db,
+	}
 }
 
 var ErrUserPermission = errors.New("permission denied: only parents can manage members")
@@ -171,7 +180,7 @@ func (s *userService) DeleteMember(actor *models.User, targetID string) error {
 	}
 
 	if actor.ID == targetID {
-		return errors.New("cannot delete yourself here")
+		return errors.New("cannot delete yourself here. Use Leave instead")
 	}
 
 	targetUser, err := s.repo.GetByID(targetID)
@@ -183,5 +192,95 @@ func (s *userService) DeleteMember(actor *models.User, targetID string) error {
 		return errors.New("access denied")
 	}
 
-	return s.repo.Delete(targetID)
+	oldFamilyID := targetUser.FamilyID
+
+	// Використовуємо логіку "розлучення" (перенесення в нову персональну сім'ю)
+	if err := s.separateUserFromFamily(targetUser, oldFamilyID); err != nil {
+		return err
+	}
+
+	// Сповіщення про видалення через WebSocket в СТАРУ сім'ю
+	s.wsHub.BroadcastToFamily(oldFamilyID, map[string]interface{}{
+		"type":    "member_removed",
+		"user_id": targetID,
+		"message": "A member has been removed from the family",
+	})
+
+	return nil
+}
+
+func (s *userService) LeaveFamily(user *models.User) error {
+	// Перевірка, чи це не єдиний член сім'ї
+	count, err := s.repo.CountFamilyMembers(user.FamilyID)
+	if err != nil {
+		return err
+	}
+
+	if count <= 1 {
+		return errors.New("you are the only member of this family. No need to leave")
+	}
+
+	oldFamilyID := user.FamilyID
+
+	if err := s.separateUserFromFamily(user, oldFamilyID); err != nil {
+		return err
+	}
+
+	// Сповіщення в СТАРУ сім'ю
+	s.wsHub.BroadcastToFamily(oldFamilyID, map[string]interface{}{
+		"type":    "member_removed",
+		"user_id": user.ID,
+		"message": "A member has left the family",
+	})
+
+	return nil
+}
+
+// separateUserFromFamily створює нову сім'ю для юзера і переносить його дані туди
+func (s *userService) separateUserFromFamily(targetUser *models.User, oldFamilyID string) error {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		// 1. Створюємо нову персональну сім'ю
+		newFamily := &models.Family{
+			Base: models.Base{
+				ID:        uuid.NewString(),
+				CreatedAt: time.Now().UnixMilli(),
+				UpdatedAt: time.Now().UnixMilli(),
+			},
+			Name: fmt.Sprintf("%s's Personal Family", targetUser.Name),
+		}
+
+		if err := tx.Create(newFamily).Error; err != nil {
+			return err
+		}
+
+		// 2. Оновлюємо користувача (новий FamilyID + роль Admin)
+		if err := tx.Model(&models.User{}).Where("id = ?", targetUser.ID).Updates(map[string]interface{}{
+			"family_id":  newFamily.ID,
+			"role_id":    "admin", // Тепер він сам собі адмін
+			"updated_at": time.Now().UnixMilli(),
+		}).Error; err != nil {
+			return err
+		}
+
+		// 3. Мігруємо дані (тільки ті, що мають user_id)
+		tablesWithUserID := []string{
+			"accounts",
+			"transactions",
+			"goals",
+			"assets",
+			"shopping_lists",
+			"wishlist_groups",
+			"wishlist_items",
+			"medical_records",
+			"bank_connections",
+		}
+
+		for _, table := range tablesWithUserID {
+			if err := tx.Table(table).Where("user_id = ?", targetUser.ID).Update("family_id", newFamily.ID).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
