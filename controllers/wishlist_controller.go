@@ -9,10 +9,10 @@ import (
 )
 
 type WishlistController struct {
-	service *services.WishlistService
+	service services.WishlistService
 }
 
-func NewWishlistController(service *services.WishlistService) *WishlistController {
+func NewWishlistController(service services.WishlistService) *WishlistController {
 	return &WishlistController{service: service}
 }
 

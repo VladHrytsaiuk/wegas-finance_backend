@@ -9,6 +9,7 @@ import (
 	"github.com/VladHrytsaiuk/wegas-finance/backend/services"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestAuthController_Login(t *testing.T) {
@@ -61,5 +62,54 @@ func TestAuthController_Login(t *testing.T) {
 
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 		mockService.AssertExpectations(t)
+	})
+}
+
+func TestAuthController_Register(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	mockService := new(services.MockAuthService)
+	controller := NewAuthController(mockService)
+
+	r := gin.Default()
+	r.POST("/register", controller.Register)
+
+	t.Run("Success", func(t *testing.T) {
+		input := services.RegisterInput{
+			Name:       "New User",
+			Email:      "new@example.com",
+			Password:   "password123",
+			InviteCode: "valid-code",
+		}
+		expectedRes := &services.LoginResponse{
+			Token: "new-token",
+			User:  models.User{Name: "New User"},
+		}
+
+		mockService.On("Register", input).Return(expectedRes, nil).Once()
+
+		body := map[string]string{
+			"name":        "New User",
+			"email":       "new@example.com",
+			"password":    "password123",
+			"invite_code": "valid-code",
+		}
+		w := PerformRequest(r, "POST", "/register", body)
+
+		assert.Equal(t, http.StatusCreated, w.Code)
+		mockService.AssertExpectations(t)
+	})
+
+	t.Run("Invalid Invite Code", func(t *testing.T) {
+		mockService.On("Register", mock.Anything).Return(nil, assert.AnError).Once()
+
+		body := map[string]string{
+			"name":        "New User",
+			"email":       "new@example.com",
+			"password":    "password123",
+			"invite_code": "wrong",
+		}
+		w := PerformRequest(r, "POST", "/register", body)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 }

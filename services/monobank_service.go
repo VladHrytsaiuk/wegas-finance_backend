@@ -98,6 +98,8 @@ type monobankService struct {
 	txService   TransactionService
 	accountRepo repositories.AccountRepository
 	clock       utils.Clock
+	baseURL     string // <--- Додано для тестів
+	SkipRateLimit bool   // <--- Додано для тестів
 	
 	// Per-user sync status
 	mu      sync.RWMutex
@@ -114,6 +116,7 @@ func NewMonobankService(db *gorm.DB, txService TransactionService, accountRepo r
 		txService:      txService,
 		accountRepo:    accountRepo,
 		clock:          clock,
+		baseURL:        "https://api.monobank.ua",
 		syncMap:        make(map[string]SyncStatus),
 		lastRequestMap: make(map[string]time.Time),
 	}
@@ -121,6 +124,9 @@ func NewMonobankService(db *gorm.DB, txService TransactionService, accountRepo r
 
 // waitForMonobankLimit гарантує, що між запитами до Mono API з одним токеном минає мінімум 61 секунда
 func (s *monobankService) waitForMonobankLimit(token string) {
+	if s.SkipRateLimit {
+		return
+	}
 	s.lastRequestMu.Lock()
 	defer s.lastRequestMu.Unlock()
 
@@ -196,10 +202,8 @@ func (s *monobankService) Connect(userID, familyID, rawToken string) ([]MonoAcco
 	return clientInfo.Accounts, nil
 }
 // 2. GetUserData - ТІЛЬКИ З БАЗИ (Для відображення статусу в профілі)
-// Ніяких запитів до API Monobank. Дуже швидко.
 func (s *monobankService) GetUserData(userID string) ([]MonoAccount, []models.BankAccountMapping, error) {
 	var conn models.BankConnection
-	// 1. Перевіряємо, чи є активне підключення
 	err := s.db.Where("user_id = ? AND provider = 'monobank' AND is_active = ?", userID, true).First(&conn).Error
 
 	if err != nil {
@@ -209,16 +213,11 @@ func (s *monobankService) GetUserData(userID string) ([]MonoAccount, []models.Ba
 		return nil, nil, err
 	}
 
-	// 2. Беремо маппінги
 	var mappings []models.BankAccountMapping
 	s.db.Where("connection_id = ?", conn.ID).Find(&mappings)
 
-	// 3. Формуємо "фейковий" список акаунтів на основі збережених даних
-	// Це потрібно, щоб фронтенд міг відмалювати список підключених карток без запиту до банку
 	var cachedAccounts []MonoAccount
-
 	for _, m := range mappings {
-		// Отримуємо баланс з нашої внутрішньої таблиці Accounts
 		var internalAcc models.Account
 		currentBalance := int64(0)
 		currencyCode := 980
@@ -234,12 +233,11 @@ func (s *monobankService) GetUserData(userID string) ([]MonoAccount, []models.Ba
 			}
 		}
 
-		// Відновлюємо дані для фронтенду
 		cachedAccounts = append(cachedAccounts, MonoAccount{
 			ID:           m.ExternalID,
 			CurrencyCode: currencyCode,
 			Balance:      currentBalance,
-			MaskedPan:    []string{"*" + m.CardNumber}, // Показуємо хоча б останні цифри
+			MaskedPan:    []string{"*" + m.CardNumber},
 			Type:         m.CardType,
 			Iban:         "",
 		})
@@ -248,8 +246,6 @@ func (s *monobankService) GetUserData(userID string) ([]MonoAccount, []models.Ba
 	return cachedAccounts, mappings, nil
 }
 
-// 2.5. RefreshClientInfo - ЗАПИТ ДО API (Для модалки налаштувань)
-// Викликається тільки коли юзер тисне "Налаштувати". Знаходить нові рахунки.
 func (s *monobankService) RefreshClientInfo(userID string) ([]MonoAccount, []models.BankAccountMapping, error) {
 	var conn models.BankConnection
 	if err := s.db.Where("user_id = ? AND provider = 'monobank' AND is_active = ?", userID, true).First(&conn).Error; err != nil {
@@ -261,21 +257,16 @@ func (s *monobankService) RefreshClientInfo(userID string) ([]MonoAccount, []mod
 		return nil, nil, errors.New("failed to decrypt token")
 	}
 
-	// 1. 🔥 Робимо реальний запит до Монобанку
 	clientInfo, apiErr := s.fetchClientInfo(token)
 	if apiErr != nil {
-		return nil, nil, apiErr // Повертаємо помилку (429 або 401), щоб фронт показав її
+		return nil, nil, apiErr
 	}
 
-	// 2. Завантажуємо існуючі налаштування
 	var mappings []models.BankAccountMapping
 	s.db.Where("connection_id = ?", conn.ID).Find(&mappings)
 
-	// Повертаємо СВІЖІ акаунти від банку і наші налаштування
 	return clientInfo.Accounts, mappings, nil
 }
-
-// 3. SaveSettings
 
 func (s *monobankService) SaveSettings(userID, familyID string, accounts []models.BankAccountMapping) error {
 	var conn models.BankConnection
@@ -283,22 +274,20 @@ func (s *monobankService) SaveSettings(userID, familyID string, accounts []model
 		return errors.New("connection not found")
 	}
 
-	// Очищаємо старі маппінги
 	s.db.Where("connection_id = ?", conn.ID).Delete(&models.BankAccountMapping{})
 
 	for _, mapping := range accounts {
 		var last4, paymentSystem string
 		var cardType = "black"
 		var creditLimit int64 = 0
-		var shouldCreateGoal = false // 🔥 За замовчуванням FALSE
+		var shouldCreateGoal = false
 
-		// 🔥 ПАРСИНГ ДАНИХ
 		if mapping.RawData != "" {
 			var payload struct {
 				MaskedPan   []string `json:"maskedPan"`
 				Type        string   `json:"type"`
 				CreditLimit int64    `json:"creditLimit"`
-				CreateGoal  bool     `json:"createGoal"` // Читаємо прапорець
+				CreateGoal  bool     `json:"createGoal"`
 			}
 			if err := json.Unmarshal([]byte(mapping.RawData), &payload); err == nil {
 				if payload.Type != "" {
@@ -316,7 +305,6 @@ func (s *monobankService) SaveSettings(userID, familyID string, accounts []model
 			last4 = mapping.CardNumber
 		}
 
-		// --- Логіка створення рахунку (якщо InternalID пустий) ---
 		if mapping.InternalAccountID == "" {
 			newAccountID := uuid.NewString()
 
@@ -339,17 +327,14 @@ func (s *monobankService) SaveSettings(userID, familyID string, accounts []model
 				CardNumber:     last4,
 				PaymentSystem:  paymentSystem,
 				IsArchived:     false,
-				Type:           "card", // Дефолт
+				Type:           "card",
 			}
 
-			// 🔥 ЛОГІКА ДЛЯ БАНОК
 			if cardType == "jar" {
 				newAccount.Type = "piggy_bank"
-				// Знаходимо тип сховища "Банка"
 				storageTypeID, _ := s.getOrCreateSystemStorageType(familyID, "Банка", "jar")
 				newAccount.StorageTypeID = storageTypeID
 
-				// 🔥 ПЕРЕВІРКА ПРАПОРЦЯ + СУМИ
 				if shouldCreateGoal {
 					newGoal := models.Goal{
 						Base: models.Base{
@@ -360,7 +345,7 @@ func (s *monobankService) SaveSettings(userID, familyID string, accounts []model
 						FamilyID:     familyID,
 						Name:         mapping.Name,
 						Description:  "Імпортовано з Monobank",
-						TargetAmount: creditLimit, // 🔥 ВИКОРИСТОВУЄМО creditLimit ЯК ЦІЛЬ
+						TargetAmount: creditLimit,
 						Currency:     mapping.Currency,
 						DateStart:    s.clock.NowUnixMilli(),
 						Color:        "#ea5353",
@@ -381,7 +366,6 @@ func (s *monobankService) SaveSettings(userID, familyID string, accounts []model
 			mapping.InternalAccountID = newAccount.ID
 		}
 
-		// Зберігаємо маппінг
 		mapping.ID = uuid.NewString()
 		mapping.ConnectionID = conn.ID
 		mapping.CardNumber = last4
@@ -396,19 +380,12 @@ func (s *monobankService) SaveSettings(userID, familyID string, accounts []model
 	return nil
 }
 
-// Допоміжний метод для пошуку/створення типу збереження (StorageType)
-// Щоб ми могли записати, що це саме "Банка", а не "Сейф" чи "Конверт"
 func (s *monobankService) getOrCreateSystemStorageType(familyID, name, slug string) (*string, error) {
 	var st models.StorageType
-	
-	// 1. Шукаємо системний або сімейний тип з таким слагом
 	err := s.db.Where("(family_id = ? OR is_system = true) AND slug = ?", familyID, slug).First(&st).Error
-	
 	if err == nil {
 		return &st.ID, nil
 	}
-
-	// 2. Якщо не знайшли - створюємо для сім'ї
 	newSt := models.StorageType{
 		Base: models.Base{
 			ID:        uuid.NewString(),
@@ -417,23 +394,20 @@ func (s *monobankService) getOrCreateSystemStorageType(familyID, name, slug stri
 		FamilyID: &familyID,
 		Name:     name,
 		Slug:     slug,
-		Icon:     "GiGlassJar", // Потрібно підібрати іконку з бібліотеки
+		Icon:     "GiGlassJar",
 		IsSystem: false,
 	}
-	
 	if err := s.db.Create(&newSt).Error; err != nil {
 		return nil, err
 	}
-
 	return &newSt.ID, nil
 }
-// 4. Sync (ВИПРАВЛЕНО: Оптимізація працює завжди)
+
 func (s *monobankService) Sync(userID string, targetAccountID string) (int, error) {
-	// 1. Перевірка: чи не запущена вже синхронізація для цього юзера
 	s.mu.Lock()
 	if status, ok := s.syncMap[userID]; ok && status.IsRunning {
 		s.mu.Unlock()
-		return 0, nil // Вже працює
+		return 0, nil
 	}
 	s.mu.Unlock()
 
@@ -441,7 +415,6 @@ func (s *monobankService) Sync(userID string, targetAccountID string) (int, erro
 	s.updateStatus(userID, status)
 
 	defer func() {
-		time.Sleep(2 * time.Second)
 		status.IsRunning = false
 		status.Message = "Готово"
 		s.updateStatus(userID, status)
@@ -451,9 +424,6 @@ func (s *monobankService) Sync(userID string, targetAccountID string) (int, erro
 	if err := s.db.First(&user, "id = ?", userID).Error; err != nil {
 		return 0, fmt.Errorf("user not found: %w", err)
 	}
-
-	fmt.Println("------------------------------------------------")
-	fmt.Printf("🔄 SYNC STARTED for user: %s\n", user.Name)
 
 	var conn models.BankConnection
 	if err := s.db.Where("user_id = ? AND provider = 'monobank'", userID).First(&conn).Error; err != nil {
@@ -467,9 +437,8 @@ func (s *monobankService) Sync(userID string, targetAccountID string) (int, erro
 
 	var mappings []models.BankAccountMapping
 	query := s.db.Where("connection_id = ? AND is_enabled = true", conn.ID)
-
 	if targetAccountID != "" {
-		query = s.db.Where("connection_id = ? AND is_enabled = true AND internal_account_id = ?", conn.ID, targetAccountID)
+		query = query.Where("internal_account_id = ?", targetAccountID)
 	}
 	query.Find(&mappings)
 
@@ -477,7 +446,6 @@ func (s *monobankService) Sync(userID string, targetAccountID string) (int, erro
 		return 0, nil
 	}
 
-	// 🔥 ЗМІНА 1: Правильно збираємо categoryMap з префіксами income_ та expense_
 	categoryMap := make(map[string]string)
 	var categories []models.Category
 	if err := s.db.Where("family_id = ?", user.FamilyID).Find(&categories).Error; err == nil {
@@ -489,8 +457,6 @@ func (s *monobankService) Sync(userID string, targetAccountID string) (int, erro
 	}
 
 	totalImported := 0
-
-	// --- 1. ІМПОРТ ТРАНЗАКЦІЙ ---
 	for _, mapping := range mappings {
 		if mapping.InternalAccountID == "" {
 			continue
@@ -500,33 +466,17 @@ func (s *monobankService) Sync(userID string, targetAccountID string) (int, erro
 		err := s.db.Where("account_id = ?", mapping.InternalAccountID).Order("date desc").First(&lastTx).Error
 
 		var startTime time.Time
-		logReason := ""
-
 		if err == nil {
 			startTime = time.UnixMilli(lastTx.Date).Add(1 * time.Second)
-			logReason = fmt.Sprintf("Last DB Transaction (%s)", startTime.Format("2006-01-02"))
 		} else {
 			if mapping.SyncFrom > 0 {
 				startTime = time.UnixMilli(mapping.SyncFrom)
-				logReason = fmt.Sprintf("User Setting SyncFrom (%s)", startTime.Format("2006-01-02"))
 			} else {
 				startTime = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
-				logReason = "Default (2024-01-01)"
-			}
-		}
-
-		if conn.LastSync != nil && !conn.LastSync.IsZero() && conn.LastSync.After(startTime) {
-			safeStart := conn.LastSync.Add(-1 * time.Hour)
-			if safeStart.After(startTime) {
-				startTime = safeStart
-				logReason = "Global LastSync adjustment"
 			}
 		}
 
 		now := s.clock.Now()
-
-		fmt.Printf("📆 Account [%s]: Start Date determined by [%s] -> %s\n", mapping.Name, logReason, startTime.Format("2006-01-02 15:04:05"))
-
 		for startTime.Before(now) {
 			endTime := startTime.AddDate(0, 0, 31)
 			if endTime.After(now) {
@@ -539,21 +489,13 @@ func (s *monobankService) Sync(userID string, targetAccountID string) (int, erro
 			status.Message = fmt.Sprintf("Завантаження %s...", mapping.Name)
 			s.updateStatus(userID, status)
 
-			fmt.Printf("📥 Fetching [%s]: %s -> %s\n",
-				mapping.Name,
-				startTime.Format("2006-01-02 15:04"),
-				endTime.Format("2006-01-02 15:04"),
-			)
-
 			monoTxs, err := s.fetchStatement(token, mapping.ExternalID, startTime.Unix(), endTime.Unix())
 			if err != nil {
-				fmt.Printf("⚠️ Skip fetch for %s: %v\n", mapping.Name, err)
 				startTime = endTime
 				continue
 			}
 
 			if len(monoTxs) > 0 {
-				fmt.Printf("   ✅ Received %d transactions\n", len(monoTxs))
 				var inputs []CreateTransactionInput
 				for _, mTx := range monoTxs {
 					var exists int64
@@ -569,7 +511,6 @@ func (s *monobankService) Sync(userID string, targetAccountID string) (int, erro
 						txType = "expense"
 					}
 
-					// 🔥 ЗМІНА 2: Використовуємо нашу універсальну функцію для підбору категорії
 					normalizedName := utils.NormalizeCounterparty(mTx.Description)
 					mccStr := strconv.Itoa(mTx.Mcc)
 					categoryID := utils.PredictCategoryID(mTx.Description, normalizedName, mccStr, txType, categoryMap)
@@ -591,23 +532,16 @@ func (s *monobankService) Sync(userID string, targetAccountID string) (int, erro
 					totalImported += count
 					status.TotalImported = totalImported
 					s.updateStatus(userID, status)
-					fmt.Printf("   💾 Saved %d new transactions to DB\n", count)
-				} else {
-					fmt.Println("   ⚪ All received transactions are duplicates")
 				}
-			} else {
-				fmt.Println("   ⚪ No transactions in this period")
 			}
 			startTime = endTime
 		}
 	}
 
-	// --- 2. ОНОВЛЕННЯ БАЛАНСІВ ---
 	status.Message = "Оновлення балансів..."
 	s.updateStatus(userID, status)
 
 	clientInfo, err := s.fetchClientInfo(token)
-
 	apiBalances := make(map[string]int64)
 	if err == nil {
 		for _, monoAcc := range clientInfo.Accounts {
@@ -619,59 +553,20 @@ func (s *monobankService) Sync(userID string, targetAccountID string) (int, erro
 		if m.InternalAccountID == "" {
 			continue
 		}
-
 		if newBalance, exists := apiBalances[m.ExternalID]; exists {
 			s.db.Model(&models.Account{}).Where("id = ?", m.InternalAccountID).Update("balance", newBalance)
-		} else {
-			var calculatedBalance int64
-			err := s.db.Model(&models.Transaction{}).
-				Where("account_id = ?", m.InternalAccountID).
-				Select(`COALESCE(SUM(CASE WHEN type IN ('expense', 'transfer_out', 'loan_give', 'debt_repay') THEN -ABS(amount) ELSE ABS(amount) END), 0)`).
-				Scan(&calculatedBalance).Error
-
-			if err == nil {
-				s.db.Model(&models.Account{}).Where("id = ?", m.InternalAccountID).Update("balance", calculatedBalance)
-
-				if calculatedBalance == 0 {
-					fmt.Printf("🗑️ Soft deleting broken jar: %s\n", m.Name)
-					var acc models.Account
-					if s.db.First(&acc, "id = ?", m.InternalAccountID).Error == nil {
-						if acc.GoalID != nil {
-							var goal models.Goal
-							if s.db.First(&goal, "id = ?", *acc.GoalID).Error == nil {
-								var otherBalance int64
-								s.db.Model(&models.Account{}).
-									Where("goal_id = ? AND id != ? AND deleted_at IS NULL", goal.ID, acc.ID).
-									Select("COALESCE(SUM(balance), 0)").
-									Scan(&otherBalance)
-
-								if otherBalance >= goal.TargetAmount && goal.TargetAmount > 0 {
-									s.db.Model(&goal).Update("status", "reached")
-								}
-							}
-						}
-						s.db.Delete(&acc)
-						s.db.Where("internal_account_id = ?", m.InternalAccountID).Delete(&models.BankAccountMapping{})
-					}
-				}
-			}
 		}
 	}
 
-	nowTime := s.clock.Now()
-	s.db.Model(&conn).Update("last_sync", nowTime)
-
-	fmt.Printf("✅ SYNC FINISHED. Total imported: %d\n", totalImported)
+	s.db.Model(&conn).Update("last_sync", s.clock.Now())
 	return totalImported, nil
 }
-// --- Helpers ---
 
 func (s *monobankService) fetchClientInfo(token string) (*MonoClientInfo, error) {
 	s.waitForMonobankLimit(token)
-	req, _ := http.NewRequest("GET", "https://api.monobank.ua/personal/client-info", nil)
+	req, _ := http.NewRequest("GET", s.baseURL+"/personal/client-info", nil)
 	req.Header.Set("X-Token", token)
 	client := &http.Client{Timeout: 10 * time.Second}
-	
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -682,48 +577,31 @@ func (s *monobankService) fetchClientInfo(token string) (*MonoClientInfo, error)
 		return nil, fmt.Errorf("api error: %d", resp.StatusCode)
 	}
 
-	// Декодуємо JSON
 	var info MonoClientInfo
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
 		return nil, err
 	}
 
-	// 🔥 ГОЛОВНА МАГІЯ: Об'єднуємо банки (Jars) з акаунтами (Accounts)
-	// Це потрібно, щоб фронтенд бачив банки як звичайні рахунки
 	for _, jar := range info.Jars {
-		// Використовуємо назву банки замість номера карти
 		displayPan := []string{jar.Title}
 		if jar.Title == "" {
 			displayPan = []string{"Скарбничка"}
 		}
-
-		jarAccount := MonoAccount{
+		info.Accounts = append(info.Accounts, MonoAccount{
 			ID:           jar.ID,
 			CurrencyCode: jar.CurrencyCode,
 			Balance:      jar.Balance,
-			
-			// Записуємо Ціль банки у CreditLimit (це використає наш SaveSettings для створення Goal)
-			CreditLimit:  jar.Goal, 
-			
+			CreditLimit:  jar.Goal,
 			MaskedPan:    displayPan,
-			Type:         "jar", // Явно вказуємо тип
-			Iban:         "",
-		}
-
-		// Додаємо до загального списку
-		info.Accounts = append(info.Accounts, jarAccount)
+			Type:         "jar",
+		})
 	}
-
 	return &info, nil
 }
 
 func (s *monobankService) fetchStatement(token, accountID string, from, to int64) ([]MonoTransaction, error) {
 	s.waitForMonobankLimit(token)
-	url := fmt.Sprintf("https://api.monobank.ua/personal/statement/%s/%d/%d", accountID, from, to)
-
-	// 🔥 ЛОГУВАННЯ ЗАПИТУ
-	fmt.Printf("   🌐 GET Request: %s\n", url)
-
+	url := fmt.Sprintf("%s/personal/statement/%s/%d/%d", s.baseURL, accountID, from, to)
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("X-Token", token)
 
@@ -735,7 +613,6 @@ func (s *monobankService) fetchStatement(token, accountID string, from, to int64
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 429 {
-		fmt.Println("   🛑 Monobank API 429: Rate Limit Hit")
 		return nil, fmt.Errorf("rate limit")
 	}
 	if resp.StatusCode != 200 {
@@ -749,81 +626,49 @@ func (s *monobankService) fetchStatement(token, accountID string, from, to int64
 	return txs, nil
 }
 
-
 func (s *monobankService) Disconnect(userID string) error {
-  var conn models.BankConnection
-  
-  // Шукаємо підключення (звичайний пошук ігнорує soft-deleted, це ок)
-  if err := s.db.Where("user_id = ? AND provider = 'monobank'", userID).First(&conn).Error; err != nil {
-    return errors.New("connection not found")
-  }
-
-  // 1. Видаляємо маппінги (HARD DELETE)
-  // Використовуємо Unscoped(), щоб стерти їх назавжди
-  s.db.Unscoped().Where("connection_id = ?", conn.ID).Delete(&models.BankAccountMapping{})
-
-  // 2. Видаляємо саме з'єднання (HARD DELETE)
-  // Unscoped() ігнорує DeletedAt і робить DELETE FROM ...
-  if err := s.db.Unscoped().Delete(&conn).Error; err != nil {
-    return err
-  }
-
-  return nil
+	var conn models.BankConnection
+	if err := s.db.Where("user_id = ? AND provider = 'monobank'", userID).First(&conn).Error; err != nil {
+		return errors.New("connection not found")
+	}
+	s.db.Unscoped().Where("connection_id = ?", conn.ID).Delete(&models.BankAccountMapping{})
+	return s.db.Unscoped().Delete(&conn).Error
 }
-// services/monobank_service.go
-// GlobalResyncCounterparties примусово перепаршує контрагентів для ВСІХ транзакцій у базі
+
 func (s *monobankService) GlobalResyncCounterparties() (int, error) {
-  // 1. Беремо ВСІ транзакції з Монобанку по всій базі (ігноруємо користувача)
-  var txs []models.Transaction
-  if err := s.db.Where("external_id != '' AND deleted_at IS NULL").Find(&txs).Error; err != nil {
-    return 0, err
-  }
-
-  updatedCount := 0
-
-  for _, tx := range txs {
-    // 2. Нормалізуємо назву
-    correctName := utils.NormalizeCounterparty(tx.Note)
-    if correctName == "" {
-      continue
-    }
-
-    // 3. Шукаємо контрагента для СІМ'Ї, якій належить ЦЯ транзакція
-    var cp models.Counterparty
-    err := s.db.Where("family_id = ? AND name = ?", tx.FamilyID, correctName).First(&cp).Error
-    
-    if err != nil {
-      // 🔥 ВИПРАВЛЕННЯ: Якщо контрагента немає в базі — просто пропускаємо цю транзакцію.
-      // Ми більше НЕ створюємо автоматично нових контрагентів з нотаток Монобанку.
-      continue 
-    }
-
-    // 4. Оновлюємо транзакцію (тільки якщо знайшли існуючого контрагента)
-    if tx.CounterpartyID != cp.ID {
-      s.db.Model(&models.Transaction{}).Where("id = ?", tx.ID).Update("counterparty_id", cp.ID)
-      updatedCount++
-    }
-  }
-
-  return updatedCount, nil
+	var txs []models.Transaction
+	if err := s.db.Where("external_id != '' AND deleted_at IS NULL").Find(&txs).Error; err != nil {
+		return 0, err
+	}
+	updatedCount := 0
+	for _, tx := range txs {
+		correctName := utils.NormalizeCounterparty(tx.Note)
+		if correctName == "" {
+			continue
+		}
+		var cp models.Counterparty
+		if err := s.db.Where("family_id = ? AND name = ?", tx.FamilyID, correctName).First(&cp).Error; err == nil {
+			if tx.CounterpartyID != cp.ID {
+				s.db.Model(&models.Transaction{}).Where("id = ?", tx.ID).Update("counterparty_id", cp.ID)
+				updatedCount++
+			}
+		}
+	}
+	return updatedCount, nil
 }
 
-// ProcessWebhook обробляє вхідну транзакцію від Monobank
 func (s *monobankService) ProcessWebhook(payload MonoWebhookPayload) error {
 	if payload.Type != "StatementItem" {
-		return nil // Ігноруємо інші типи (наприклад, перевірка з'єднання)
+		return nil
 	}
-
 	mTx := payload.Data.StatementItem
 	externalAccountID := payload.Data.Account
 
-	// 1. Знаходимо маппінг рахунку
 	var mapping models.BankAccountMapping
 	if err := s.db.Where("external_id = ? AND is_enabled = true", externalAccountID).First(&mapping).Error; err != nil {
 		return fmt.Errorf("account mapping not found or disabled: %w", err)
 	}
 
-	// 2. Знаходимо підключення та юзера
 	var conn models.BankConnection
 	if err := s.db.First(&conn, "id = ?", mapping.ConnectionID).Error; err != nil {
 		return fmt.Errorf("connection not found: %w", err)
@@ -834,24 +679,19 @@ func (s *monobankService) ProcessWebhook(payload MonoWebhookPayload) error {
 		return fmt.Errorf("user not found: %w", err)
 	}
 
-	// 3. Перевірка на дублікат
 	var exists int64
-	s.db.Model(&models.Transaction{}).
-		Where("external_id = ? AND account_id = ?", mTx.ID, mapping.InternalAccountID).
-		Count(&exists)
+	s.db.Model(&models.Transaction{}).Where("external_id = ? AND account_id = ?", mTx.ID, mapping.InternalAccountID).Count(&exists)
 	if exists > 0 {
-		return nil // Вже є в базі
+		return nil
 	}
 
-	// 4. Підготовка транзакції
 	txType := "income"
 	if mTx.Amount < 0 {
 		txType = "expense"
 	}
 
-	// Категорія
-	var categories []models.Category
 	categoryMap := make(map[string]string)
+	var categories []models.Category
 	if err := s.db.Where("family_id = ?", user.FamilyID).Find(&categories).Error; err == nil {
 		for _, cat := range categories {
 			exactKey := fmt.Sprintf("%s_%s", cat.Type, strings.ToLower(cat.Name))
@@ -861,8 +701,7 @@ func (s *monobankService) ProcessWebhook(payload MonoWebhookPayload) error {
 	}
 
 	normalizedName := utils.NormalizeCounterparty(mTx.Description)
-	mccStr := strconv.Itoa(mTx.Mcc)
-	categoryID := utils.PredictCategoryID(mTx.Description, normalizedName, mccStr, txType, categoryMap)
+	categoryID := utils.PredictCategoryID(mTx.Description, normalizedName, strconv.Itoa(mTx.Mcc), txType, categoryMap)
 
 	input := CreateTransactionInput{
 		AccountID:        mapping.InternalAccountID,
@@ -875,14 +714,11 @@ func (s *monobankService) ProcessWebhook(payload MonoWebhookPayload) error {
 		ExternalID:       mTx.ID,
 	}
 
-	// 5. Створюємо транзакцію
 	_, err := s.txService.Create(input, nil, &user)
 	if err != nil {
 		return fmt.Errorf("failed to create transaction from webhook: %w", err)
 	}
 
-	// 6. Оновлюємо баланс рахунку
 	s.db.Model(&models.Account{}).Where("id = ?", mapping.InternalAccountID).Update("balance", mTx.Balance)
-
 	return nil
 }

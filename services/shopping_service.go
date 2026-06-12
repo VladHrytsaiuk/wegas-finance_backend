@@ -6,16 +6,27 @@ import (
 	"github.com/google/uuid" // <--- ДОДАЛИ ІМПОРТ
 )
 
-type ShoppingService struct {
+type ShoppingService interface {
+	CreateList(req models.CreateShoppingListRequest, userID, familyID string) (*models.ShoppingList, error)
+	GetLists(familyID string, userID string) ([]models.ShoppingList, error)
+	UpdateList(id string, req models.UpdateShoppingListRequest, familyID string) error
+	DeleteList(id string, familyID string) error
+	AddItemToList(listID string, req models.CreateShoppingItemRequest) (*models.ShoppingItem, error)
+	UpdateItem(id string, req models.UpdateShoppingItemRequest) error
+	DeleteItem(id string) error
+	ClearCompletedInList(listID string) error
+}
+
+type shoppingService struct {
 	repo *repositories.ShoppingRepo
 }
 
-func NewShoppingService(repo *repositories.ShoppingRepo) *ShoppingService {
-	return &ShoppingService{repo: repo}
+func NewShoppingService(repo *repositories.ShoppingRepo) ShoppingService {
+	return &shoppingService{repo: repo}
 }
 
 // --- LISTS ---
-func (s *ShoppingService) CreateList(req models.CreateShoppingListRequest, userID, familyID string) (*models.ShoppingList, error) {
+func (s *shoppingService) CreateList(req models.CreateShoppingListRequest, userID, familyID string) (*models.ShoppingList, error) {
 	visibility := "public"
 	if req.Visibility != "" {
 		visibility = req.Visibility
@@ -37,11 +48,11 @@ func (s *ShoppingService) CreateList(req models.CreateShoppingListRequest, userI
 	return list, err
 }
 
-func (s *ShoppingService) GetLists(familyID string, userID string) ([]models.ShoppingList, error) {
+func (s *shoppingService) GetLists(familyID string, userID string) ([]models.ShoppingList, error) {
 	return s.repo.GetLists(familyID, userID)
 }
 
-func (s *ShoppingService) UpdateList(id string, req models.UpdateShoppingListRequest, familyID string) error {
+func (s *shoppingService) UpdateList(id string, req models.UpdateShoppingListRequest, familyID string) error {
 	updates := make(map[string]interface{})
 	if req.Title != nil {
 		updates["title"] = *req.Title
@@ -62,12 +73,12 @@ func (s *ShoppingService) UpdateList(id string, req models.UpdateShoppingListReq
 	return nil
 }
 
-func (s *ShoppingService) DeleteList(id string, familyID string) error {
+func (s *shoppingService) DeleteList(id string, familyID string) error {
 	return s.repo.DeleteList(id, familyID)
 }
 
 // --- ITEMS ---
-func (s *ShoppingService) AddItemToList(listID string, req models.CreateShoppingItemRequest) (*models.ShoppingItem, error) {
+func (s *shoppingService) AddItemToList(listID string, req models.CreateShoppingItemRequest) (*models.ShoppingItem, error) {
 	item := &models.ShoppingItem{
 		ListID:   listID,
 		Name:     req.Name,
@@ -81,7 +92,7 @@ func (s *ShoppingService) AddItemToList(listID string, req models.CreateShopping
 	return item, err
 }
 
-func (s *ShoppingService) UpdateItem(id string, req models.UpdateShoppingItemRequest) error {
+func (s *shoppingService) UpdateItem(id string, req models.UpdateShoppingItemRequest) error {
 	updates := make(map[string]interface{})
 	if req.Name != nil {
 		updates["name"] = *req.Name
@@ -96,10 +107,10 @@ func (s *ShoppingService) UpdateItem(id string, req models.UpdateShoppingItemReq
 	return nil
 }
 
-func (s *ShoppingService) DeleteItem(id string) error {
+func (s *shoppingService) DeleteItem(id string) error {
 	return s.repo.DeleteItem(id)
 }
 
-func (s *ShoppingService) ClearCompletedInList(listID string) error {
+func (s *shoppingService) ClearCompletedInList(listID string) error {
 	return s.repo.ClearCompletedInList(listID)
 }

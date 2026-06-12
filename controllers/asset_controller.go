@@ -9,10 +9,10 @@ import (
 )
 
 type AssetController struct {
-  service *services.AssetService
+  service services.AssetService
 }
 
-func NewAssetController(s *services.AssetService) *AssetController {
+func NewAssetController(s services.AssetService) *AssetController {
   return &AssetController{service: s}
 }
 

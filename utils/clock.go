@@ -47,3 +47,7 @@ func (c *MockClock) NowUnixMilli() int64 {
 func (c *MockClock) NowUnixNano() int64 {
 	return c.FixedTime.UnixNano()
 }
+
+func (c *MockClock) Add(d time.Duration) {
+	c.FixedTime = c.FixedTime.Add(d)
+}

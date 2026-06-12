@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const tgBaseURL = "https://api.telegram.org/bot%s/%s"
+var tgBaseURL = "https://api.telegram.org/bot%s/%s"
 
 type Client struct {
 	token  string

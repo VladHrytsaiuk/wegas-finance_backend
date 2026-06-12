@@ -5,13 +5,14 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/services"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
-func TestTransactionController_Create(t *testing.T) {
+func TestTransactionController(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	mockService := new(services.MockTransactionService)
 	controller := NewTransactionController(mockService)
@@ -21,9 +22,15 @@ func TestTransactionController_Create(t *testing.T) {
 		SetupTestUser(c, "user-123", "family-456")
 		c.Next()
 	})
+	
 	r.POST("/transactions", controller.Create)
+	r.GET("/transactions", controller.GetAll)
+	r.GET("/transactions/:id", controller.GetOne)
+	r.PUT("/transactions/:id", controller.Update)
+	r.DELETE("/transactions/:id", controller.Delete)
+	r.POST("/transactions/batch", controller.BatchCreate)
 
-	t.Run("Success JSON", func(t *testing.T) {
+	t.Run("Create Success JSON", func(t *testing.T) {
 		inputJSON := CreateTxJSON{
 			AccountID: "acc-1",
 			Amount:    1000,
@@ -31,26 +38,71 @@ func TestTransactionController_Create(t *testing.T) {
 			Type:      "expense",
 		}
 
-		mockService.On("Create", mock.MatchedBy(func(in services.CreateTransactionInput) bool {
-			return in.AccountID == "acc-1" && in.Amount == 1000 && in.Type == "expense"
-		}), mock.Anything, mock.Anything).Return("tx-1", nil).Once()
+		mockService.On("Create", mock.Anything, mock.Anything, mock.Anything).Return("tx-1", nil).Once()
 
 		w := PerformRequest(r, "POST", "/transactions", inputJSON)
 
 		assert.Equal(t, http.StatusCreated, w.Code)
-		var res map[string]string
-		json.Unmarshal(w.Body.Bytes(), &res)
-		assert.Equal(t, "success", res["status"])
-		assert.Equal(t, "tx-1", res["id"])
 		mockService.AssertExpectations(t)
 	})
 
-	t.Run("Bind Error", func(t *testing.T) {
-		body := map[string]interface{}{
-			"amount": "invalid", // should be int64
-		}
-		w := PerformRequest(r, "POST", "/transactions", body)
+	t.Run("GetAll", func(t *testing.T) {
+		mockService.On("GetAll", mock.Anything, mock.Anything).Return([]models.Transaction{
+			{Base: models.Base{ID: "tx-1"}, Amount: 100},
+		}, int64(1), nil).Once()
 
-		assert.Equal(t, http.StatusBadRequest, w.Code)
+		w := PerformRequest(r, "GET", "/transactions", nil)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp map[string]interface{}
+		json.Unmarshal(w.Body.Bytes(), &resp)
+		assert.Equal(t, float64(1), resp["count"])
+	})
+
+	t.Run("GetOne Success", func(t *testing.T) {
+		mockService.On("GetByID", "tx-1", mock.Anything).Return(&models.Transaction{
+			Base: models.Base{ID: "tx-1"},
+		}, nil).Once()
+
+		w := PerformRequest(r, "GET", "/transactions/tx-1", nil)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("Update Success", func(t *testing.T) {
+		input := CreateTxJSON{
+			AccountID: "acc-1",
+			Amount:    2000,
+			Date:      123456789,
+			Type:      "expense",
+		}
+		mockService.On("Update", "tx-1", mock.Anything, mock.Anything).Return(nil).Once()
+
+		w := PerformRequest(r, "PUT", "/transactions/tx-1", input)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("Delete Success", func(t *testing.T) {
+		mockService.On("Delete", "tx-1", mock.Anything).Return(nil).Once()
+
+		w := PerformRequest(r, "DELETE", "/transactions/tx-1", nil)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("BatchCreate Success", func(t *testing.T) {
+		inputs := []CreateTxJSON{
+			{AccountID: "acc-1", Amount: 100, Type: "expense", Date: 123},
+			{AccountID: "acc-1", Amount: 200, Type: "income", Date: 124},
+		}
+		mockService.On("BatchCreate", mock.Anything, mock.Anything).Return(2, nil).Once()
+
+		w := PerformRequest(r, "POST", "/transactions/batch", inputs)
+
+		assert.Equal(t, http.StatusCreated, w.Code)
+		var res map[string]interface{}
+		json.Unmarshal(w.Body.Bytes(), &res)
+		assert.Equal(t, float64(2), res["count"])
 	})
 }

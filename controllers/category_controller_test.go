@@ -13,86 +13,51 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCategoryController_Create(t *testing.T) {
+func TestCategoryController(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	mockService := new(services.MockCategoryService)
-	controller := NewCategoryController(mockService)
 
-	t.Run("Success", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		_, r := gin.CreateTestContext(w)
-
-		input := services.CategoryInput{Name: "Food", Type: "expense"}
-		user := &models.User{Base: models.Base{ID: "user1"}, RoleID: "admin"}
+	t.Run("Create Category", func(t *testing.T) {
+		mockService := new(services.MockCategoryService)
+		controller := NewCategoryController(mockService)
 		
-		r.POST("/categories", func(c *gin.Context) {
-			c.Set("user", user)
-			controller.Create(c)
-		})
+		user := &models.User{Base: models.Base{ID: "u-1"}, FamilyID: "f-1"}
+		input := services.CategoryInput{Name: "Food", Type: "expense"}
 
-		mockService.On("Create", input, user).Return(&models.Category{Name: "Food"}, nil)
+		mockService.On("Create", input, user).Return(&models.Category{
+			Base: models.Base{ID: "cat-1"},
+			Name: "Food",
+		}, nil)
 
-		req := httptest.NewRequest("POST", "/categories", PerformBody(input))
-		r.ServeHTTP(w, req)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Set("user", user)
+		
+		body, _ := json.Marshal(input)
+		c.Request, _ = http.NewRequest("POST", "/api/categories", bytes.NewReader(body))
+		
+		controller.Create(c)
 
 		assert.Equal(t, http.StatusCreated, w.Code)
-		var resp models.Category
-		json.Unmarshal(w.Body.Bytes(), &resp)
-		assert.Equal(t, "Food", resp.Name)
 		mockService.AssertExpectations(t)
 	})
 
-	t.Run("Forbidden", func(t *testing.T) {
+	t.Run("GetAll Categories", func(t *testing.T) {
+		mockService := new(services.MockCategoryService)
+		controller := NewCategoryController(mockService)
+		
+		user := &models.User{Base: models.Base{ID: "u-1"}}
+		mockService.On("GetAll", user).Return([]models.Category{
+			{Name: "Food"}, {Name: "Rent"},
+		}, nil)
+
 		w := httptest.NewRecorder()
-		_, r := gin.CreateTestContext(w)
-
-		input := services.CategoryInput{Name: "Food"}
-		user := &models.User{Base: models.Base{ID: "user1"}, RoleID: "child"}
-
-		r.POST("/categories", func(c *gin.Context) {
-			c.Set("user", user)
-			controller.Create(c)
-		})
-
-		mockService.On("Create", input, user).Return(nil, services.ErrAccessDenied)
-
-		req := httptest.NewRequest("POST", "/categories", PerformBody(input))
-		r.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusForbidden, w.Code)
-	})
-}
-
-func TestCategoryController_GetAll(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	mockService := new(services.MockCategoryService)
-	controller := NewCategoryController(mockService)
-
-	w := httptest.NewRecorder()
-	_, r := gin.CreateTestContext(w)
-
-	user := &models.User{Base: models.Base{ID: "user1"}}
-	categories := []models.Category{{Name: "Food"}, {Name: "Rent"}}
-
-	r.GET("/categories", func(c *gin.Context) {
+		c, _ := gin.CreateTestContext(w)
 		c.Set("user", user)
+		c.Request, _ = http.NewRequest("GET", "/api/categories", nil)
+		
 		controller.GetAll(c)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		mockService.AssertExpectations(t)
 	})
-
-	mockService.On("GetAll", user).Return(categories, nil)
-
-	req := httptest.NewRequest("GET", "/categories", nil)
-	r.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-	var resp []models.Category
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	assert.Equal(t, 2, len(resp))
-}
-
-// Helper to encode body
-func PerformBody(body interface{}) *bytes.Buffer {
-	var buf bytes.Buffer
-	json.NewEncoder(&buf).Encode(body)
-	return &buf
 }

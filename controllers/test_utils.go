@@ -30,6 +30,7 @@ func SetupTestUser(ctx *gin.Context, userID, familyID string) {
 	}
 	ctx.Set("user", user)
 	ctx.Set("userID", userID)
+	ctx.Set("familyID", familyID)
 }
 
 // PerformRequest is a helper to perform a request for testing

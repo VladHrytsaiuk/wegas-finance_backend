@@ -40,6 +40,11 @@ func SetupTestDB() (*gorm.DB, error) {
 		&models.ShoppingItem{},
 		&models.WishlistGroup{},
 		&models.WishlistItem{},
+		&models.FamilyJoinCode{},
+		&models.MedicalRecord{},
+		&models.UtilityMeter{},
+		&models.UtilityReading{},
+		&models.ExchangeRate{},
 	)
 	if err != nil {
 		return nil, err

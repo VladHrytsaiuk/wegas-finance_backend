@@ -4,20 +4,12 @@ import (
 	"errors"
 	"mime/multipart"
 	"path/filepath"
-	"strings"
 
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/repositories"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/utils"
 	"github.com/google/uuid"
 )
-
-type AssetService struct {
-	repo    repositories.AssetRepository
-	txRepo  repositories.TransactionRepository
-	storage StorageService
-	clock   utils.Clock
-}
 
 // Допоміжні структури для статистики
 type AssetStats struct {
@@ -32,11 +24,31 @@ type AssetWithStats struct {
 	Stats AssetStats `json:"stats"`
 }
 
-func NewAssetService(repo repositories.AssetRepository, txRepo repositories.TransactionRepository, storage StorageService, clock utils.Clock) *AssetService {
-	return &AssetService{repo: repo, txRepo: txRepo, storage: storage, clock: clock}
+type AssetService interface {
+	GetAll(user *models.User) ([]models.Asset, error)
+	Create(input models.Asset, user *models.User) (string, error)
+	GetByID(id string, user *models.User) (*AssetWithStats, error)
+	Update(id string, input models.Asset, user *models.User) error
+	UpdateMileage(id string, mileage int, user *models.User) error
+	Delete(id string, user *models.User) error
+	UploadPhoto(id string, file multipart.File, header *multipart.FileHeader, user *models.User) (string, error)
+	RemovePhoto(id string, photoPath string, user *models.User) error
+	UploadDocument(id string, file multipart.File, header *multipart.FileHeader, user *models.User) (*models.AssetDocument, error)
+	RemoveDocument(id string, docID string, user *models.User) error
 }
 
-func (s *AssetService) Create(input models.Asset, user *models.User) (string, error) {
+type assetService struct {
+	repo    repositories.AssetRepository
+	txRepo  repositories.TransactionRepository
+	storage StorageService
+	clock   utils.Clock
+}
+
+func NewAssetService(repo repositories.AssetRepository, txRepo repositories.TransactionRepository, storage StorageService, clock utils.Clock) AssetService {
+	return &assetService{repo: repo, txRepo: txRepo, storage: storage, clock: clock}
+}
+
+func (s *assetService) Create(input models.Asset, user *models.User) (string, error) {
 	input.ID = uuid.NewString()
 	input.FamilyID = user.FamilyID
 	input.CreatedAt = s.clock.NowUnixMilli()
@@ -54,11 +66,11 @@ func (s *AssetService) Create(input models.Asset, user *models.User) (string, er
 	return input.ID, s.repo.Create(&input)
 }
 
-func (s *AssetService) GetAll(user *models.User) ([]models.Asset, error) {
+func (s *assetService) GetAll(user *models.User) ([]models.Asset, error) {
 	return s.repo.GetAll(user.FamilyID)
 }
 
-func (s *AssetService) GetByID(id string, user *models.User) (*AssetWithStats, error) {
+func (s *assetService) GetByID(id string, user *models.User) (*AssetWithStats, error) {
 	asset, err := s.repo.GetByID(id, user.FamilyID)
 	if err != nil {
 		return nil, err
@@ -89,7 +101,7 @@ func (s *AssetService) GetByID(id string, user *models.User) (*AssetWithStats, e
 	return &AssetWithStats{Asset: asset, Stats: stats}, nil
 }
 
-func (s *AssetService) Update(id string, input models.Asset, user *models.User) error {
+func (s *assetService) Update(id string, input models.Asset, user *models.User) error {
 	existing, err := s.repo.GetByID(id, user.FamilyID)
 	if err != nil {
 		return err
@@ -111,19 +123,13 @@ func (s *AssetService) Update(id string, input models.Asset, user *models.User) 
 	existing.EstimatedLife = input.EstimatedLife
 	existing.InitialValue = input.InitialValue
 	existing.VINCode = input.VINCode
-	existing.Mileage = input.Mileage
-	existing.InitialMileage = input.InitialMileage
-	existing.InsuranceExpiry = input.InsuranceExpiry
-	existing.LastServiceDate = input.LastServiceDate
-	existing.Address = input.Address
-	existing.Area = input.Area
-	existing.CadastralNum = input.CadastralNum
+
 	existing.UpdatedAt = s.clock.NowUnixMilli()
 
 	return s.repo.Update(existing)
 }
 
-func (s *AssetService) UpdateMileage(id string, newMileage int, user *models.User) error {
+func (s *assetService) UpdateMileage(id string, newMileage int, user *models.User) error {
 	existing, err := s.repo.GetByID(id, user.FamilyID)
 	if err != nil {
 		return err
@@ -133,11 +139,11 @@ func (s *AssetService) UpdateMileage(id string, newMileage int, user *models.Use
 	return s.repo.Update(existing)
 }
 
-func (s *AssetService) Delete(id string, user *models.User) error {
+func (s *assetService) Delete(id string, user *models.User) error {
 	return s.repo.Delete(id, user.FamilyID)
 }
 
-func (s *AssetService) UploadPhoto(assetID string, file multipart.File, header *multipart.FileHeader, user *models.User) (string, error) {
+func (s *assetService) UploadPhoto(assetID string, file multipart.File, header *multipart.FileHeader, user *models.User) (string, error) {
 	asset, err := s.repo.GetByID(assetID, user.FamilyID)
 	if err != nil {
 		return "", errors.New("asset not found")
@@ -148,25 +154,20 @@ func (s *AssetService) UploadPhoto(assetID string, file multipart.File, header *
 		return "", err
 	}
 
-	galleryPhoto := &models.AssetPhoto{
-		Base:    models.Base{ID: uuid.NewString(), CreatedAt: s.clock.NowUnixMilli(), UpdatedAt: s.clock.NowUnixMilli()},
-		AssetID: assetID,
-		Path:    path,
-	}
-
-	if err := s.repo.AddPhotoToGallery(galleryPhoto); err != nil {
-		_ = s.storage.DeleteFile(path)
-		return "", err
-	}
-
 	if asset.Photo == "" {
 		_ = s.repo.UpdatePhoto(assetID, path)
+	} else {
+		_ = s.repo.AddPhotoToGallery(&models.AssetPhoto{
+			Base:    models.Base{ID: uuid.NewString(), CreatedAt: s.clock.NowUnixMilli()},
+			AssetID: assetID,
+			Path:    path,
+		})
 	}
 
 	return path, nil
 }
 
-func (s *AssetService) RemovePhoto(assetID string, path string, user *models.User) error {
+func (s *assetService) RemovePhoto(assetID string, path string, user *models.User) error {
 	_, err := s.repo.GetByID(assetID, user.FamilyID)
 	if err != nil {
 		return errors.New("asset not found")
@@ -175,47 +176,35 @@ func (s *AssetService) RemovePhoto(assetID string, path string, user *models.Use
 	if err := s.repo.RemovePhoto(assetID, path); err != nil {
 		return err
 	}
+
 	_ = s.storage.DeleteFile(path)
 	return nil
 }
 
 // 🔥 НОВИЙ МЕТОД ДЛЯ ЗАВАНТАЖЕННЯ ДОКУМЕНТІВ (PDF тощо)
-func (s *AssetService) UploadDocument(assetID string, file multipart.File, header *multipart.FileHeader, user *models.User) (*models.AssetDocument, error) {
+func (s *assetService) UploadDocument(assetID string, file multipart.File, header *multipart.FileHeader, user *models.User) (*models.AssetDocument, error) {
 	// 1. Перевіряємо права
 	_, err := s.repo.GetByID(assetID, user.FamilyID)
 	if err != nil {
 		return nil, errors.New("asset not found")
 	}
 
-	// 2. Валідація розміру (наприклад, макс 10 МБ)
-	const maxUploadSize = 10 << 20 // 10 MB
-	if header.Size > maxUploadSize {
-		return nil, errors.New("file too large (max 10MB)")
-	}
-
-	// 3. Зберігаємо оригінальну назву і розширення
-	originalExt := strings.ToLower(filepath.Ext(header.Filename))
+	// 2. Зберігаємо файл
 	path, err := s.storage.SaveFile(header, "documents")
 	if err != nil {
 		return nil, err
 	}
 
-	// 4. Створюємо запис в БД
+	// 3. Записуємо в БД
 	doc := &models.AssetDocument{
-		Base: models.Base{
-			ID:        uuid.NewString(),
-			CreatedAt: s.clock.NowUnixMilli(),
-			UpdatedAt: s.clock.NowUnixMilli(),
-		},
+		Base:     models.Base{ID: uuid.NewString(), CreatedAt: s.clock.NowUnixMilli()},
 		AssetID:  assetID,
-		Name:     header.Filename, // Оригінальна назва файлу, яку побачить користувач
+		Name:     header.Filename,
 		Path:     path,
-		FileType: strings.TrimPrefix(originalExt, "."),
-		Size:     header.Size,
+		FileType: filepath.Ext(header.Filename),
 	}
 
 	if err := s.repo.AddDocument(doc); err != nil {
-		_ = s.storage.DeleteFile(path) // Відкат, якщо помилка БД
 		return nil, err
 	}
 
@@ -223,7 +212,7 @@ func (s *AssetService) UploadDocument(assetID string, file multipart.File, heade
 }
 
 // 🔥 НОВИЙ МЕТОД ДЛЯ ВИДАЛЕННЯ ДОКУМЕНТА
-func (s *AssetService) RemoveDocument(assetID string, documentID string, user *models.User) error {
+func (s *assetService) RemoveDocument(assetID string, documentID string, user *models.User) error {
 	// Перевіряємо права на актив
 	_, err := s.repo.GetByID(assetID, user.FamilyID)
 	if err != nil {
@@ -232,20 +221,19 @@ func (s *AssetService) RemoveDocument(assetID string, documentID string, user *m
 
 	doc, err := s.repo.GetDocumentByID(documentID)
 	if err != nil {
-		return errors.New("document not found")
+		return err
 	}
 
 	if err := s.repo.RemoveDocument(assetID, documentID); err != nil {
 		return err
 	}
 
-	// Фізично видаляємо файл
 	_ = s.storage.DeleteFile(doc.Path)
 
 	return nil
 }
 
-func (s *AssetService) CalculateDepreciation(a *models.Asset) int64 {
+func (s *assetService) CalculateDepreciation(a *models.Asset) int64 {
 	if a.IsSold {
 		return a.SoldPrice
 	}
@@ -253,27 +241,39 @@ func (s *AssetService) CalculateDepreciation(a *models.Asset) int64 {
 		return a.CurrentPrice
 	}
 
-	now := s.clock.NowUnixMilli()
-	ageInYears := float64(now-a.PurchaseDate) / (1000 * 60 * 60 * 24 * 365.25)
-
-	life := 5.0
-	if a.EstimatedLife > 0 {
-		life = float64(a.EstimatedLife) / 12.0
-	}
-	if ageInYears > life {
+	if a.Price == 0 {
 		return 0
 	}
 
-	val := float64(a.Price)
-	if a.InitialValue > 0 {
-		val = float64(a.InitialValue)
+	// Якщо не вказано термін експлуатації - повертаємо ціну покупки
+	if a.EstimatedLife <= 0 {
+		return a.Price
 	}
 
-	depreciationRate := 1.0 / life
-	currentValue := val * (1 - (ageInYears * depreciationRate))
+	// Розрахунок віку в місяцях
+	now := s.clock.NowUnixMilli()
+	ageMs := now - a.PurchaseDate
+	if ageMs <= 0 {
+		return a.Price
+	}
+
+	ageMonths := float64(ageMs) / (1000 * 60 * 60 * 24 * 30.44)
+	
+	// Початкова вартість для амортизації
+	startingValue := float64(a.Price)
+	baseValue := a.Price
+	if a.InitialValue > 0 {
+		baseValue = a.InitialValue
+		startingValue = float64(a.InitialValue)
+	}
+
+	// Лінійна амортизація
+	depreciation := (float64(baseValue) / float64(a.EstimatedLife)) * ageMonths
+	currentValue := startingValue - depreciation
 
 	if currentValue < 0 {
 		return 0
 	}
+
 	return int64(currentValue)
 }

@@ -15,7 +15,7 @@ func TestCalculateDepreciation(t *testing.T) {
 	fixedNow := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	mockClock := utils.NewMockClock(fixedNow)
 	
-	service := &AssetService{clock: mockClock}
+	service := &assetService{clock: mockClock}
 
 	tests := []struct {
 		name     string
