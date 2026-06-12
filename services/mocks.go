@@ -1038,6 +1038,16 @@ func (m *MockTelegramClient) SendMediaGroup(caption string, photos [][]byte) err
 	return args.Error(0)
 }
 
+// MockExportRepository
+type MockExportRepository struct {
+	mock.Mock
+}
+
+func (m *MockExportRepository) GetTransactionsForExport(familyID string, filter models.ExportFilterDTO) ([]models.Transaction, error) {
+	args := m.Called(familyID, filter)
+	return args.Get(0).([]models.Transaction), args.Error(1)
+}
+
 // MockImportService
 type MockImportService struct {
 	mock.Mock
