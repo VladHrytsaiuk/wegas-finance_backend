@@ -80,4 +80,28 @@ func TestUtilityService(t *testing.T) {
 		assert.Len(t, payTxs, 1)
 		assert.Equal(t, int64(26400), payTxs[0].Amount)
 	})
+
+	t.Run("Tariff Ratchet", func(t *testing.T) {
+		meter := models.UtilityMeter{
+			Base: models.Base{ID: "m-tariff"},
+			FamilyID: "fam-util",
+			Name: "Water",
+			Tariff: 10.0,
+		}
+		db.Create(&meter)
+
+		// New reading with higher tariff (15.0)
+		read := models.UtilityReading{
+			MeterID: "m-tariff",
+			Value: 50,
+			TariffAtDate: 15.0,
+		}
+		err := service.CreateReading(read, user)
+		assert.NoError(t, err)
+
+		// Verify meter tariff updated
+		var updatedMeter models.UtilityMeter
+		db.First(&updatedMeter, "id = ?", "m-tariff")
+		assert.Equal(t, 15.0, updatedMeter.Tariff)
+	})
 }

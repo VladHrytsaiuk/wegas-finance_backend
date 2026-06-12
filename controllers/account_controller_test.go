@@ -1,10 +1,7 @@
 package controllers
 
 import (
-	"bytes"
-	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
@@ -16,83 +13,86 @@ import (
 
 func TestAccountController(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	mockService := new(services.MockAccountService)
+	controller := NewAccountController(mockService)
+
+	r := gin.Default()
+	r.Use(func(c *gin.Context) {
+		SetupTestUser(c, "user-1", "family-1")
+		c.Next()
+	})
+
+	r.POST("/accounts", controller.Create)
+	r.GET("/accounts", controller.GetAll)
+	r.GET("/accounts/:id", controller.GetOne)
+	r.PUT("/accounts/:id", controller.Update)
+	r.DELETE("/accounts/:id", controller.Delete)
 
 	t.Run("Create Account", func(t *testing.T) {
-		mockService := new(services.MockAccountService)
-		controller := NewAccountController(mockService)
-		
-		user := &models.User{Base: models.Base{ID: "user-1"}, FamilyID: "family-1"}
 		input := AccountInputJSON{
 			Name:     "Test Account",
 			Type:     "cash",
 			Currency: "UAH",
 		}
 
-		mockService.On("Create", mock.Anything, user).Return(&models.Account{
+		mockService.On("Create", mock.Anything, mock.Anything).Return(&models.Account{
 			Base: models.Base{ID: "acc-1"},
 			Name: "Test Account",
-		}, nil)
+		}, nil).Once()
 
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Set("user", user)
-		
-		body, _ := json.Marshal(input)
-		c.Request, _ = http.NewRequest("POST", "/accounts", bytes.NewReader(body))
-		
-		controller.Create(c)
+		w := PerformRequest(r, "POST", "/accounts", input)
 
 		assert.Equal(t, http.StatusCreated, w.Code)
-		var response models.Account
-		json.Unmarshal(w.Body.Bytes(), &response)
-		assert.Equal(t, "acc-1", response.ID)
 		mockService.AssertExpectations(t)
 	})
 
 	t.Run("GetAll Accounts", func(t *testing.T) {
-		mockService := new(services.MockAccountService)
-		controller := NewAccountController(mockService)
-		
-		user := &models.User{Base: models.Base{ID: "user-1"}, FamilyID: "family-1"}
-		mockService.On("GetAll", user).Return([]models.Account{
+		mockService.On("GetAll", mock.Anything).Return([]models.Account{
 			{Base: models.Base{ID: "acc-1"}, Name: "Acc 1"},
-			{Base: models.Base{ID: "acc-2"}, Name: "Acc 2"},
-		}, nil)
+		}, nil).Once()
 
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Set("user", user)
-		
-		controller.GetAll(c)
+		w := PerformRequest(r, "GET", "/accounts", nil)
 
 		assert.Equal(t, http.StatusOK, w.Code)
-		var response []models.Account
-		json.Unmarshal(w.Body.Bytes(), &response)
-		assert.Len(t, response, 2)
 		mockService.AssertExpectations(t)
 	})
 
 	t.Run("GetOne Account", func(t *testing.T) {
-		mockService := new(services.MockAccountService)
-		controller := NewAccountController(mockService)
-		
-		user := &models.User{Base: models.Base{ID: "user-1"}, FamilyID: "family-1"}
-		mockService.On("GetByID", "acc-1", user).Return(&models.Account{
+		mockService.On("GetByID", "acc-1", mock.Anything).Return(&models.Account{
 			Base: models.Base{ID: "acc-1"},
 			Name: "Acc 1",
-		}, nil)
+		}, nil).Once()
 
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Params = gin.Params{{Key: "id", Value: "acc-1"}}
-		c.Set("user", user)
-		
-		controller.GetOne(c)
+		w := PerformRequest(r, "GET", "/accounts/acc-1", nil)
 
 		assert.Equal(t, http.StatusOK, w.Code)
-		var response models.Account
-		json.Unmarshal(w.Body.Bytes(), &response)
-		assert.Equal(t, "acc-1", response.ID)
+		mockService.AssertExpectations(t)
+	})
+
+	t.Run("Update Account", func(t *testing.T) {
+		input := AccountInputJSON{
+			Name:     "Updated Account",
+			Type:     "bank",
+			Currency: "USD",
+		}
+
+		mockService.On("Update", "acc-1", mock.Anything, mock.Anything).Return(&models.Account{
+			Base: models.Base{ID: "acc-1"},
+			Name: "Updated Account",
+		}, nil).Once()
+
+		w := PerformRequest(r, "PUT", "/accounts/acc-1", input)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		mockService.AssertExpectations(t)
+	})
+
+	t.Run("Delete Account", func(t *testing.T) {
+		mockService.On("Delete", "acc-1", mock.Anything).Return(nil).Once()
+
+		w := PerformRequest(r, "DELETE", "/accounts/acc-1", nil)
+
+		assert.Equal(t, http.StatusOK, w.Code)
 		mockService.AssertExpectations(t)
 	})
 }

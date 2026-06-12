@@ -14,12 +14,16 @@ import (
 	"gorm.io/gorm"
 )
 
-type ImportService struct {
+type ImportService interface {
+	ProcessFile(file *multipart.FileHeader, accountID string, bankType string) (*PreviewResult, error)
+}
+
+type importService struct {
 	DB *gorm.DB
 }
 
-func NewImportService(db *gorm.DB) *ImportService {
-	return &ImportService{DB: db}
+func NewImportService(db *gorm.DB) ImportService {
+	return &importService{DB: db}
 }
 
 type PreviewTransaction struct {
@@ -41,7 +45,7 @@ type PreviewResult struct {
 	Transactions []PreviewTransaction `json:"transactions"`
 }
 
-func (s *ImportService) ProcessFile(file *multipart.FileHeader, accountID string, bankType string) (*PreviewResult, error) {
+func (s *importService) ProcessFile(file *multipart.FileHeader, accountID string, bankType string) (*PreviewResult, error) {
 	src, err := file.Open()
 	if err != nil {
 		return nil, err
@@ -127,7 +131,7 @@ func (s *ImportService) ProcessFile(file *multipart.FileHeader, accountID string
 	return result, nil
 }
 
-func (s *ImportService) findCounterpartyByName(familyID, name string) (*models.Counterparty, bool) {
+func (s *importService) findCounterpartyByName(familyID, name string) (*models.Counterparty, bool) {
 	if name == "" {
 		return nil, false
 	}
@@ -142,7 +146,7 @@ func (s *ImportService) findCounterpartyByName(familyID, name string) (*models.C
 	return nil, false
 }
 
-func (s *ImportService) checkMatchStatus(accountID string, pt parsers.ParsedTransaction) (*models.Transaction, bool, bool, string) {
+func (s *importService) checkMatchStatus(accountID string, pt parsers.ParsedTransaction) (*models.Transaction, bool, bool, string) {
 	amount := pt.Amount
 	if amount < 0 {
 		amount = -amount
@@ -186,7 +190,7 @@ func (s *ImportService) checkMatchStatus(accountID string, pt parsers.ParsedTran
 	return nil, false, false, ""
 }
 
-func (s *ImportService) loadCategoryMap(familyID string) map[string]string {
+func (s *importService) loadCategoryMap(familyID string) map[string]string {
 	var categories []models.Category
 	mapping := make(map[string]string)
 	s.DB.Where("family_id = ?", familyID).Find(&categories)

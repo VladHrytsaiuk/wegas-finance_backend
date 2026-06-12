@@ -42,6 +42,7 @@ func SetupTestDB() (*gorm.DB, error) {
 		&models.WishlistItem{},
 		&models.FamilyJoinCode{},
 		&models.MedicalRecord{},
+		&models.MedicalFile{},
 		&models.UtilityMeter{},
 		&models.UtilityReading{},
 		&models.ExchangeRate{},

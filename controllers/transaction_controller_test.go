@@ -1,8 +1,11 @@
 package controllers
 
 import (
+	"bytes"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
@@ -29,6 +32,10 @@ func TestTransactionController(t *testing.T) {
 	r.PUT("/transactions/:id", controller.Update)
 	r.DELETE("/transactions/:id", controller.Delete)
 	r.POST("/transactions/batch", controller.BatchCreate)
+	r.POST("/transactions/:id/receipt", controller.UploadReceipt)
+	r.DELETE("/transactions/:id/receipt", controller.DeleteReceipt)
+	r.DELETE("/transactions/photos/:id", controller.DeletePhoto)
+	r.GET("/transactions/predict", controller.PredictCategory)
 
 	t.Run("Create Success JSON", func(t *testing.T) {
 		inputJSON := CreateTxJSON{
@@ -104,5 +111,46 @@ func TestTransactionController(t *testing.T) {
 		var res map[string]interface{}
 		json.Unmarshal(w.Body.Bytes(), &res)
 		assert.Equal(t, float64(2), res["count"])
+	})
+
+	t.Run("Delete Receipt Success", func(t *testing.T) {
+		mockService.On("DeleteReceipt", "tx-1", mock.Anything).Return(nil).Once()
+		w := PerformRequest(r, "DELETE", "/transactions/tx-1/receipt", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("Delete Photo Success", func(t *testing.T) {
+		mockService.On("DeletePhoto", "photo-1", mock.Anything).Return(nil).Once()
+		w := PerformRequest(r, "DELETE", "/transactions/photos/photo-1", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("Predict Category Success", func(t *testing.T) {
+		mockService.On("PredictCategory", "Milk", mock.Anything).Return("cat-1", nil).Once()
+		w := PerformRequest(r, "GET", "/transactions/predict?name=Milk", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var res map[string]interface{}
+		json.Unmarshal(w.Body.Bytes(), &res)
+		assert.Equal(t, "cat-1", res["category_id"])
+	})
+
+	t.Run("Upload Receipt Success", func(t *testing.T) {
+		mockService.On("UploadReceipt", "tx-1", mock.Anything, mock.Anything, mock.Anything).Return("/path/to/receipt.jpg", nil).Once()
+
+		body := &bytes.Buffer{}
+		writer := multipart.NewWriter(body)
+		part, _ := writer.CreateFormFile("file", "test.jpg")
+		part.Write([]byte("fake image data"))
+		writer.Close()
+
+		req, _ := http.NewRequest("POST", "/transactions/tx-1/receipt", body)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var res map[string]interface{}
+		json.Unmarshal(w.Body.Bytes(), &res)
+		assert.Equal(t, "/path/to/receipt.jpg", res["path"])
 	})
 }

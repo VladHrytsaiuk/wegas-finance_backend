@@ -205,4 +205,62 @@ func TestTransactionRepo_Integration(t *testing.T) {
 		db.Unscoped().First(&deletedTx, "id = ?", tx.ID)
 		assert.NotNil(t, deletedTx.DeletedAt)
 	})
+
+	t.Run("TestDebtLogic", func(t *testing.T) {
+		// debt_take - should decrease balance (increase debt)
+		tx := &models.Transaction{
+			Base:           models.Base{ID: uuid.NewString()},
+			FamilyID:       family.ID,
+			UserID:         user.ID,
+			AccountID:      account1.ID,
+			CounterpartyID: counterparty.ID,
+			Type:           "debt_take",
+			Amount:         500,
+			Currency:       "UAH",
+			Date:           time.Now().UnixMilli(),
+		}
+		repo.Create(tx, nil, nil, nil)
+
+		var balance models.CounterpartyBalance
+		db.First(&balance, "counterparty_id = ? AND currency = ?", counterparty.ID, "UAH")
+		assert.Equal(t, int64(-500), balance.Balance)
+
+		// debt_repay - should increase balance (decrease debt)
+		repayTx := &models.Transaction{
+			Base:           models.Base{ID: uuid.NewString()},
+			FamilyID:       family.ID,
+			UserID:         user.ID,
+			AccountID:      account1.ID,
+			CounterpartyID: counterparty.ID,
+			Type:           "debt_repay",
+			Amount:         200,
+			Currency:       "UAH",
+			Date:           time.Now().UnixMilli(),
+		}
+		repo.Create(repayTx, nil, nil, nil)
+
+		db.First(&balance, "counterparty_id = ? AND currency = ?", counterparty.ID, "UAH")
+		assert.Equal(t, int64(-300), balance.Balance)
+	})
+
+	t.Run("TestGetAllTransactions", func(t *testing.T) {
+		filter := TransactionFilter{
+			FamilyID: family.ID,
+			Limit:    20,
+		}
+		txs, count, err := repo.GetAll(filter)
+		assert.NoError(t, err)
+		assert.True(t, count > 0)
+		assert.NotEmpty(t, txs)
+	})
+
+	t.Run("TestGetByID", func(t *testing.T) {
+		// Use the first tx we created
+		var someTx models.Transaction
+		db.First(&someTx)
+		
+		res, err := repo.GetByID(someTx.ID, family.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, someTx.ID, res.ID)
+	})
 }

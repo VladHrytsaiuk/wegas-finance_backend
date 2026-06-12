@@ -929,3 +929,335 @@ func (m *MockWishlistService) RemovePhoto(id string, familyID string) error {
 	args := m.Called(id, familyID)
 	return args.Error(0)
 }
+
+// MockCounterpartyService
+type MockCounterpartyService struct {
+	mock.Mock
+}
+
+func (m *MockCounterpartyService) CreateCategory(input CpCategoryInput, user *models.User) (*models.CounterpartyCategory, error) {
+	args := m.Called(input, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.CounterpartyCategory), args.Error(1)
+}
+
+func (m *MockCounterpartyService) GetCategories(user *models.User) ([]models.CounterpartyCategory, error) {
+	args := m.Called(user)
+	return args.Get(0).([]models.CounterpartyCategory), args.Error(1)
+}
+
+func (m *MockCounterpartyService) UpdateCategory(id string, input CpCategoryInput, user *models.User) (*models.CounterpartyCategory, error) {
+	args := m.Called(id, input, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.CounterpartyCategory), args.Error(1)
+}
+
+func (m *MockCounterpartyService) GetCategoryByID(id string, user *models.User) (*models.CounterpartyCategory, error) {
+	args := m.Called(id, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.CounterpartyCategory), args.Error(1)
+}
+
+func (m *MockCounterpartyService) Create(input CounterpartyInput, user *models.User) (*models.Counterparty, error) {
+	args := m.Called(input, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Counterparty), args.Error(1)
+}
+
+func (m *MockCounterpartyService) GetAll(user *models.User) ([]models.Counterparty, error) {
+	args := m.Called(user)
+	return args.Get(0).([]models.Counterparty), args.Error(1)
+}
+
+func (m *MockCounterpartyService) Update(id string, input CounterpartyInput, user *models.User) (*models.Counterparty, error) {
+	args := m.Called(id, input, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Counterparty), args.Error(1)
+}
+
+func (m *MockCounterpartyService) Delete(id string, user *models.User) error {
+	args := m.Called(id, user)
+	return args.Error(0)
+}
+
+func (m *MockCounterpartyService) GetByID(id string, user *models.User) (*models.Counterparty, error) {
+	args := m.Called(id, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Counterparty), args.Error(1)
+}
+
+// MockExportService
+type MockExportService struct {
+	mock.Mock
+}
+
+func (m *MockExportService) GetTransactions(user *models.User, filter models.ExportFilterDTO) ([]models.Transaction, error) {
+	args := m.Called(user, filter)
+	return args.Get(0).([]models.Transaction), args.Error(1)
+}
+
+// MockFeedbackService
+type MockFeedbackService struct {
+	mock.Mock
+}
+
+func (m *MockFeedbackService) SendFeedback(name, contact, message, priority string, images [][]byte) error {
+	args := m.Called(name, contact, message, priority, images)
+	return args.Error(0)
+}
+
+// MockImportService
+type MockImportService struct {
+	mock.Mock
+}
+
+func (m *MockImportService) ProcessFile(file *multipart.FileHeader, accountID string, bankType string) (*PreviewResult, error) {
+	args := m.Called(file, accountID, bankType)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*PreviewResult), args.Error(1)
+}
+
+// MockRoleService
+type MockRoleService struct {
+	mock.Mock
+}
+
+func (m *MockRoleService) Create(input CreateRoleInput) (*models.Role, error) {
+	args := m.Called(input)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Role), args.Error(1)
+}
+
+func (m *MockRoleService) GetAll() ([]models.Role, error) {
+	args := m.Called()
+	return args.Get(0).([]models.Role), args.Error(1)
+}
+
+func (m *MockRoleService) Delete(id string) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
+// MockUserRepository
+type MockUserRepository struct {
+	mock.Mock
+}
+
+func (m *MockUserRepository) Create(user *models.User) error {
+	args := m.Called(user)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) GetByEmail(email string) (*models.User, error) {
+	args := m.Called(email)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.User), args.Error(1)
+}
+
+func (m *MockUserRepository) GetByID(id string) (*models.User, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.User), args.Error(1)
+}
+
+func (m *MockUserRepository) Update(user *models.User) error {
+	args := m.Called(user)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) GetFamilyMembers(familyID string) ([]models.User, error) {
+	args := m.Called(familyID)
+	return args.Get(0).([]models.User), args.Error(1)
+}
+
+func (m *MockUserRepository) CountFamilyMembers(familyID string) (int64, error) {
+	args := m.Called(familyID)
+	return args.Get(1).(int64), args.Error(1)
+}
+
+func (m *MockUserRepository) Delete(id string) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) CreateFamily(family *models.Family) error {
+	args := m.Called(family)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) GetFamilyByID(id string) (*models.Family, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Family), args.Error(1)
+}
+
+func (m *MockUserRepository) DeleteFamily(id string) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) GetDB() *gorm.DB {
+	args := m.Called()
+	return args.Get(0).(*gorm.DB)
+}
+
+// MockStorageTypeService
+type MockStorageTypeService struct {
+	mock.Mock
+}
+
+func (m *MockStorageTypeService) Create(st *models.StorageType) error {
+	args := m.Called(st)
+	return args.Error(0)
+}
+
+func (m *MockStorageTypeService) GetAll(familyID string) ([]models.StorageType, error) {
+	args := m.Called(familyID)
+	return args.Get(0).([]models.StorageType), args.Error(1)
+}
+
+func (m *MockStorageTypeService) Delete(id string) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
+// MockStorageTypeRepository
+type MockStorageTypeRepository struct {
+	mock.Mock
+}
+
+func (m *MockStorageTypeRepository) Create(st *models.StorageType) error {
+	args := m.Called(st)
+	return args.Error(0)
+}
+
+func (m *MockStorageTypeRepository) FindAvailable(familyID string) ([]models.StorageType, error) {
+	args := m.Called(familyID)
+	return args.Get(0).([]models.StorageType), args.Error(1)
+}
+
+func (m *MockStorageTypeRepository) Delete(id string) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
+func (m *MockStorageTypeRepository) FindBySlug(slug string) (*models.StorageType, error) {
+	args := m.Called(slug)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.StorageType), args.Error(1)
+}
+
+// MockTagService
+type MockTagService struct {
+	mock.Mock
+}
+
+func (m *MockTagService) Create(name string, color string, user *models.User) (*models.Tag, error) {
+	args := m.Called(name, color, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Tag), args.Error(1)
+}
+
+func (m *MockTagService) GetAll(familyID string) ([]models.Tag, error) {
+	args := m.Called(familyID)
+	return args.Get(0).([]models.Tag), args.Error(1)
+}
+
+func (m *MockTagService) Delete(id string, user *models.User) error {
+	args := m.Called(id, user)
+	return args.Error(0)
+}
+
+// MockUtilityService
+type MockUtilityService struct {
+	mock.Mock
+}
+
+func (m *MockUtilityService) CreateMeter(input models.UtilityMeter, user *models.User) error {
+	args := m.Called(input, user)
+	return args.Error(0)
+}
+
+func (m *MockUtilityService) GetMeters(user *models.User) ([]models.UtilityMeter, error) {
+	args := m.Called(user)
+	return args.Get(0).([]models.UtilityMeter), args.Error(1)
+}
+
+func (m *MockUtilityService) GetMeterByID(id string, user *models.User) (*models.UtilityMeter, error) {
+	args := m.Called(id, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.UtilityMeter), args.Error(1)
+}
+
+func (m *MockUtilityService) UpdateMeter(id string, input models.UtilityMeter, user *models.User) error {
+	args := m.Called(id, input, user)
+	return args.Error(0)
+}
+
+func (m *MockUtilityService) DeleteMeter(id string, user *models.User) error {
+	args := m.Called(id, user)
+	return args.Error(0)
+}
+
+func (m *MockUtilityService) CreateReading(input models.UtilityReading, user *models.User) error {
+	args := m.Called(input, user)
+	return args.Error(0)
+}
+
+func (m *MockUtilityService) GetReadings(user *models.User, meterID string) ([]models.UtilityReading, error) {
+	args := m.Called(user, meterID)
+	return args.Get(0).([]models.UtilityReading), args.Error(1)
+}
+
+func (m *MockUtilityService) UpdateReading(id string, input models.UtilityReading, user *models.User) error {
+	args := m.Called(id, input, user)
+	return args.Error(0)
+}
+
+func (m *MockUtilityService) DeleteReading(id string, user *models.User) error {
+	args := m.Called(id, user)
+	return args.Error(0)
+}
+
+func (m *MockUtilityService) PayReading(readingID string, accountID string, user *models.User) error {
+	args := m.Called(readingID, accountID, user)
+	return args.Error(0)
+}
+
+func (m *MockUtilityService) GetGlobalStats(user *models.User) ([]models.UtilityStatGlobalDTO, error) {
+	args := m.Called(user)
+	return args.Get(0).([]models.UtilityStatGlobalDTO), args.Error(1)
+}
+
+func (m *MockUtilityService) GetMeterStats(meterID string, user *models.User) ([]models.UtilityStatMeterDTO, error) {
+	args := m.Called(meterID, user)
+	return args.Get(0).([]models.UtilityStatMeterDTO), args.Error(1)
+}

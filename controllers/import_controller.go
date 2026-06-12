@@ -6,10 +6,10 @@ import (
 )
 
 type ImportController struct {
-	Service *services.ImportService
+	Service services.ImportService
 }
 
-func NewImportController(service *services.ImportService) *ImportController {
+func NewImportController(service services.ImportService) *ImportController {
 	return &ImportController{Service: service}
 }
 

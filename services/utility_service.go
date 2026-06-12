@@ -10,7 +10,24 @@ import (
 	"github.com/google/uuid"
 )
 
-type UtilityService struct {
+type UtilityService interface {
+	CreateMeter(input models.UtilityMeter, user *models.User) error
+	GetMeters(user *models.User) ([]models.UtilityMeter, error)
+	GetMeterByID(id string, user *models.User) (*models.UtilityMeter, error)
+	UpdateMeter(id string, input models.UtilityMeter, user *models.User) error
+	DeleteMeter(id string, user *models.User) error
+
+	CreateReading(input models.UtilityReading, user *models.User) error
+	GetReadings(user *models.User, meterID string) ([]models.UtilityReading, error)
+	UpdateReading(id string, input models.UtilityReading, user *models.User) error
+	DeleteReading(id string, user *models.User) error
+	PayReading(readingID string, accountID string, user *models.User) error
+
+	GetGlobalStats(user *models.User) ([]models.UtilityStatGlobalDTO, error)
+	GetMeterStats(meterID string, user *models.User) ([]models.UtilityStatMeterDTO, error)
+}
+
+type utilityService struct {
 	repo      repositories.UtilityRepository
 	txRepo    repositories.TransactionRepository
 	assetRepo repositories.AssetRepository
@@ -20,8 +37,8 @@ func NewUtilityService(
 	repo repositories.UtilityRepository,
 	txRepo repositories.TransactionRepository,
 	assetRepo repositories.AssetRepository,
-) *UtilityService {
-	return &UtilityService{
+) UtilityService {
+	return &utilityService{
 		repo:      repo,
 		txRepo:    txRepo,
 		assetRepo: assetRepo,
@@ -30,7 +47,7 @@ func NewUtilityService(
 
 // --- METERS ---
 
-func (s *UtilityService) CreateMeter(input models.UtilityMeter, user *models.User) error {
+func (s *utilityService) CreateMeter(input models.UtilityMeter, user *models.User) error {
 	if input.NewAsset != nil {
 		newAsset := &models.Asset{
 			Base:         models.Base{ID: uuid.NewString(), CreatedAt: time.Now().UnixMilli(), IsSynced: true},
@@ -58,15 +75,15 @@ func (s *UtilityService) CreateMeter(input models.UtilityMeter, user *models.Use
 	return s.repo.CreateMeter(&input)
 }
 
-func (s *UtilityService) GetMeters(user *models.User) ([]models.UtilityMeter, error) {
+func (s *utilityService) GetMeters(user *models.User) ([]models.UtilityMeter, error) {
 	return s.repo.GetMeters(user.FamilyID)
 }
 
-func (s *UtilityService) GetMeterByID(id string, user *models.User) (*models.UtilityMeter, error) {
+func (s *utilityService) GetMeterByID(id string, user *models.User) (*models.UtilityMeter, error) {
 	return s.repo.GetMeterByID(id, user.FamilyID)
 }
 
-func (s *UtilityService) UpdateMeter(id string, input models.UtilityMeter, user *models.User) error {
+func (s *utilityService) UpdateMeter(id string, input models.UtilityMeter, user *models.User) error {
 	existing, err := s.repo.GetMeterByID(id, user.FamilyID)
 	if err != nil {
 		return err
@@ -107,13 +124,13 @@ func (s *UtilityService) UpdateMeter(id string, input models.UtilityMeter, user 
 	return s.repo.UpdateMeter(existing)
 }
 
-func (s *UtilityService) DeleteMeter(id string, user *models.User) error {
+func (s *utilityService) DeleteMeter(id string, user *models.User) error {
 	return s.repo.DeleteMeter(id, user.FamilyID)
 }
 
 // --- READINGS ---
 
-func (s *UtilityService) CreateReading(input models.UtilityReading, user *models.User) error {
+func (s *utilityService) CreateReading(input models.UtilityReading, user *models.User) error {
 	// 1. Отримуємо лічильник
 	meter, err := s.repo.GetMeterByID(input.MeterID, user.FamilyID)
 	if err != nil {
@@ -218,11 +235,11 @@ func (s *UtilityService) CreateReading(input models.UtilityReading, user *models
 	return nil
 }
 
-func (s *UtilityService) GetReadings(user *models.User, meterID string) ([]models.UtilityReading, error) {
+func (s *utilityService) GetReadings(user *models.User, meterID string) ([]models.UtilityReading, error) {
 	return s.repo.GetReadings(user.FamilyID, meterID)
 }
 
-func (s *UtilityService) UpdateReading(id string, input models.UtilityReading, user *models.User) error {
+func (s *utilityService) UpdateReading(id string, input models.UtilityReading, user *models.User) error {
 	updates := map[string]interface{}{
 		"updated_at": time.Now().UnixMilli(),
 		"is_paid":    input.IsPaid,
@@ -254,7 +271,7 @@ func (s *UtilityService) UpdateReading(id string, input models.UtilityReading, u
 }
 
 // 🔥 ВИПРАВЛЕНИЙ DELETE READING (ВИДАЛЯЄ ОБИДВІ ТРАНЗАКЦІЇ)
-func (s *UtilityService) DeleteReading(id string, user *models.User) error {
+func (s *utilityService) DeleteReading(id string, user *models.User) error {
 	// 1. Отримуємо показник
 	reading, err := s.repo.GetReadingByID(id)
 	if err != nil {
@@ -301,7 +318,7 @@ func (s *UtilityService) DeleteReading(id string, user *models.User) error {
 }
 
 // 🔥 ВИПРАВЛЕНИЙ PAY READING (ПИШЕ В НОВЕ ПОЛЕ)
-func (s *UtilityService) PayReading(readingID string, accountID string, user *models.User) error {
+func (s *utilityService) PayReading(readingID string, accountID string, user *models.User) error {
 	reading, err := s.repo.GetReadingByID(readingID)
 	if err != nil {
 		return err
@@ -337,10 +354,10 @@ func (s *UtilityService) PayReading(readingID string, accountID string, user *mo
 }
 
 
-func (s *UtilityService) GetGlobalStats(user *models.User) ([]models.UtilityStatGlobalDTO, error) {
+func (s *utilityService) GetGlobalStats(user *models.User) ([]models.UtilityStatGlobalDTO, error) {
 	// Беремо статистику за останні 12 місяців
 	oneYearAgo := time.Now().AddDate(-1, 0, 0).UnixMilli()
-	
+
 	rawRows, err := s.repo.GetGlobalStats(user.FamilyID, oneYearAgo)
 	if err != nil {
 		return nil, err
@@ -349,7 +366,7 @@ func (s *UtilityService) GetGlobalStats(user *models.User) ([]models.UtilityStat
 	// 1. Групуємо raw дані в map по місяцях
 	// map[ "2025-01" ] -> map[ "electricity": 500, "gas": 200 ]
 	grouped := make(map[string]map[string]float64)
-	
+
 	// Зберігаємо порядок місяців (бо map не гарантує порядок)
 	var months []string 
 	seenMonths := make(map[string]bool)
@@ -358,7 +375,7 @@ func (s *UtilityService) GetGlobalStats(user *models.User) ([]models.UtilityStat
 		if _, exists := grouped[row.Month]; !exists {
 			grouped[row.Month] = make(map[string]float64)
 		}
-		
+
 		if !seenMonths[row.Month] {
 			months = append(months, row.Month)
 			seenMonths[row.Month] = true
@@ -382,19 +399,19 @@ func (s *UtilityService) GetGlobalStats(user *models.User) ([]models.UtilityStat
 }
 
 // GET METER STATS (Local)
-func (s *UtilityService) GetMeterStats(meterID string, user *models.User) ([]models.UtilityStatMeterDTO, error) {
+func (s *utilityService) GetMeterStats(meterID string, user *models.User) ([]models.UtilityStatMeterDTO, error) {
 	// Також за рік
 	oneYearAgo := time.Now().AddDate(-1, 0, 0).UnixMilli()
-	
+
 	stats, err := s.repo.GetMeterStats(meterID, user.FamilyID, oneYearAgo)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Конвертуємо копійки в гривні для зручності
 	for i := range stats {
 		stats[i].TotalCost = stats[i].TotalCost / 100.0
 	}
-	
+
 	return stats, nil
 }

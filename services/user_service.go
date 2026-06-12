@@ -397,11 +397,16 @@ func (s *userService) separateUserFromFamily(targetUser *models.User, oldFamilyI
 				}
 				
 				// Елементи транзакції
-				tx.Table("transaction_items").Where("transaction_id = ?", t.ID).
-					Where("category_id IN ?", getKeys(categoryMap)).
-					Select("category_id").Find(nil) // Тут складніше через масове оновлення
-				
-				// Для простоти пройдемося циклом по items, якщо треба
+				var items []models.TransactionItem
+				if err := tx.Where("transaction_id = ?", t.ID).Find(&items).Error; err == nil {
+					for _, it := range items {
+						if it.CategoryID != nil {
+							if newID, ok := categoryMap[*it.CategoryID]; ok {
+								tx.Model(&it).Update("category_id", newID)
+							}
+						}
+					}
+				}
 			}
 		}
 

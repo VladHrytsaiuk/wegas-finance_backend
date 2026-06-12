@@ -9,10 +9,10 @@ import (
 )
 
 type StorageTypeController struct {
-	service *services.StorageTypeService
+	service services.StorageTypeService
 }
 
-func NewStorageTypeController(service *services.StorageTypeService) *StorageTypeController {
+func NewStorageTypeController(service services.StorageTypeService) *StorageTypeController {
 	return &StorageTypeController{service: service}
 }
 

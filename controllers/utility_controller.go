@@ -9,10 +9,10 @@ import (
 )
 
 type UtilityController struct {
-	service *services.UtilityService
+	service services.UtilityService
 }
 
-func NewUtilityController(s *services.UtilityService) *UtilityController {
+func NewUtilityController(s services.UtilityService) *UtilityController {
 	return &UtilityController{service: s}
 }
 
