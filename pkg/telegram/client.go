@@ -12,22 +12,28 @@ import (
 
 var tgBaseURL = "https://api.telegram.org/bot%s/%s"
 
-type Client struct {
-	token  string
-	chatID string
-	client *http.Client
+type TelegramClient interface {
+	SendMessage(text string) error
+	SendPhoto(caption string, photoName string, photoBytes []byte) error
+	SendMediaGroup(caption string, photos [][]byte) error
 }
 
-func NewClient(token string, chatID string) *Client {
-	return &Client{
+type client struct {
+	token  string
+	chatID string
+	httpClient *http.Client
+}
+
+func NewClient(token string, chatID string) TelegramClient {
+	return &client{
 		token:  token,
 		chatID: chatID,
-		client: &http.Client{Timeout: 30 * time.Second}, // Збільшив таймаут, бо фото можуть важити багато
+		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
 // SendMessage: Тільки текст
-func (c *Client) SendMessage(text string) error {
+func (c *client) SendMessage(text string) error {
 	url := fmt.Sprintf(tgBaseURL, c.token, "sendMessage")
 
 	body, _ := json.Marshal(map[string]string{
@@ -40,7 +46,7 @@ func (c *Client) SendMessage(text string) error {
 }
 
 // SendPhoto: Одне фото + підпис
-func (c *Client) SendPhoto(caption string, photoName string, photoBytes []byte) error {
+func (c *client) SendPhoto(caption string, photoName string, photoBytes []byte) error {
 	url := fmt.Sprintf(tgBaseURL, c.token, "sendPhoto")
 
 	body := &bytes.Buffer{}
@@ -63,7 +69,7 @@ func (c *Client) SendPhoto(caption string, photoName string, photoBytes []byte) 
 }
 
 // SendMediaGroup: Декілька фото (альбом) + підпис
-func (c *Client) SendMediaGroup(caption string, photos [][]byte) error {
+func (c *client) SendMediaGroup(caption string, photos [][]byte) error {
 	url := fmt.Sprintf(tgBaseURL, c.token, "sendMediaGroup")
 
 	body := &bytes.Buffer{}
@@ -118,8 +124,8 @@ func (c *Client) SendMediaGroup(caption string, photos [][]byte) error {
 }
 
 // Допоміжні приватні методи для зменшення дублювання коду
-func (c *Client) sendJSON(url string, body []byte) error {
-	resp, err := c.client.Post(url, "application/json", bytes.NewBuffer(body))
+func (c *client) sendJSON(url string, body []byte) error {
+	resp, err := c.httpClient.Post(url, "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
@@ -132,14 +138,14 @@ func (c *Client) sendJSON(url string, body []byte) error {
 	return nil
 }
 
-func (c *Client) sendMultipart(url, contentType string, body io.Reader) error {
+func (c *client) sendMultipart(url, contentType string, body io.Reader) error {
 	req, err := http.NewRequest("POST", url, body)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", contentType)
 
-	resp, err := c.client.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}

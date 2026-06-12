@@ -12,7 +12,7 @@ type FeedbackService interface {
 }
 
 type feedbackService struct {
-	tgClient *telegram.Client
+	tgClient telegram.TelegramClient
 }
 
 func NewFeedbackService(tgToken, tgChatID string) FeedbackService {

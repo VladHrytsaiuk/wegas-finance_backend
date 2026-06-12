@@ -1018,6 +1018,26 @@ func (m *MockFeedbackService) SendFeedback(name, contact, message, priority stri
 	return args.Error(0)
 }
 
+// MockTelegramClient
+type MockTelegramClient struct {
+	mock.Mock
+}
+
+func (m *MockTelegramClient) SendMessage(text string) error {
+	args := m.Called(text)
+	return args.Error(0)
+}
+
+func (m *MockTelegramClient) SendPhoto(caption string, photoName string, photoBytes []byte) error {
+	args := m.Called(caption, photoName, photoBytes)
+	return args.Error(0)
+}
+
+func (m *MockTelegramClient) SendMediaGroup(caption string, photos [][]byte) error {
+	args := m.Called(caption, photos)
+	return args.Error(0)
+}
+
 // MockImportService
 type MockImportService struct {
 	mock.Mock
@@ -1191,6 +1211,34 @@ func (m *MockTagService) GetAll(familyID string) ([]models.Tag, error) {
 
 func (m *MockTagService) Delete(id string, user *models.User) error {
 	args := m.Called(id, user)
+	return args.Error(0)
+}
+
+// MockTagRepository
+type MockTagRepository struct {
+	mock.Mock
+}
+
+func (m *MockTagRepository) Create(tag *models.Tag) error {
+	args := m.Called(tag)
+	return args.Error(0)
+}
+
+func (m *MockTagRepository) GetAll(familyID string) ([]models.Tag, error) {
+	args := m.Called(familyID)
+	return args.Get(0).([]models.Tag), args.Error(1)
+}
+
+func (m *MockTagRepository) GetByID(id string, familyID string) (*models.Tag, error) {
+	args := m.Called(id, familyID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Tag), args.Error(1)
+}
+
+func (m *MockTagRepository) Delete(id string, familyID string) error {
+	args := m.Called(id, familyID)
 	return args.Error(0)
 }
 

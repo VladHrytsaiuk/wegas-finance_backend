@@ -263,4 +263,62 @@ func TestTransactionRepo_Integration(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, someTx.ID, res.ID)
 	})
+
+	t.Run("TestBatchCreate", func(t *testing.T) {
+		txs := []models.Transaction{
+			{Base: models.Base{ID: uuid.NewString()}, FamilyID: family.ID, UserID: user.ID, Amount: 10, Type: "expense", Currency: "UAH"},
+			{Base: models.Base{ID: uuid.NewString()}, FamilyID: family.ID, UserID: user.ID, Amount: 20, Type: "expense", Currency: "UAH"},
+		}
+		count, err := repo.BatchCreate(txs)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, count)
+	})
+
+	t.Run("TestGetPredictedCategory", func(t *testing.T) {
+		// Create some history
+		cat1 := models.Category{Base: models.Base{ID: "cat-pred-1"}, FamilyID: family.ID, Name: "Groceries"}
+		cat2 := models.Category{Base: models.Base{ID: "cat-pred-2"}, FamilyID: family.ID, Name: "Gas"}
+		db.Create(&cat1)
+		db.Create(&cat2)
+
+		now := time.Now().UnixMilli()
+		tx1ID := uuid.NewString()
+		tx := models.Transaction{Base: models.Base{ID: tx1ID}, FamilyID: family.ID, UserID: user.ID, Date: now}
+		db.Create(&tx)
+		db.Create(&models.TransactionItem{Base: models.Base{ID: uuid.NewString()}, TransactionID: tx1ID, Name: "Milk", CategoryID: &cat1.ID})
+		db.Create(&models.TransactionItem{Base: models.Base{ID: uuid.NewString()}, TransactionID: tx1ID, Name: "Bread", CategoryID: &cat1.ID})
+		
+		tx2ID := uuid.NewString()
+		tx2 := models.Transaction{Base: models.Base{ID: tx2ID}, FamilyID: family.ID, UserID: user.ID, Date: now}
+		db.Create(&tx2)
+		db.Create(&models.TransactionItem{Base: models.Base{ID: uuid.NewString()}, TransactionID: tx2ID, Name: "Petrol", CategoryID: &cat2.ID})
+
+		// Test prediction
+		res, err := repo.GetPredictedCategory(family.ID, "Milk")
+		assert.NoError(t, err)
+		assert.Equal(t, "cat-pred-1", res)
+
+		res, err = repo.GetPredictedCategory(family.ID, "Petro")
+		assert.NoError(t, err)
+		assert.Equal(t, "cat-pred-2", res)
+	})
+
+	t.Run("TestSearchTransactionsCyrillic", func(t *testing.T) {
+		note := "Оренда квартири " + uuid.NewString()
+		tx := &models.Transaction{
+			Base:      models.Base{ID: uuid.NewString()},
+			FamilyID:  family.ID,
+			UserID:    user.ID,
+			Note:      note,
+			Amount:    1000,
+			Type:      "expense",
+			Date:      time.Now().UnixMilli(),
+		}
+		db.Create(tx)
+
+		// Search exact - MUST set Limit
+		_, count, err := repo.GetAll(TransactionFilter{FamilyID: family.ID, Search: "Оренда", Limit: 100})
+		assert.NoError(t, err)
+		assert.True(t, count >= 1)
+	})
 }
