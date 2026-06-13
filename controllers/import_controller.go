@@ -32,6 +32,12 @@ func (c *ImportController) UploadStatement(ctx *gin.Context) {
 		return
 	}
 
+	// 🛑 ПЕРЕВІРКА ЛІМІТУ: Максимум 20MB
+	if file.Size > 20*1024*1024 {
+		ctx.JSON(400, gin.H{"error": "File size exceeds limit (20MB)"})
+		return
+	}
+
 	accountID := ctx.PostForm("account_id")
 	if accountID == "" {
 		ctx.JSON(400, gin.H{"error": "account_id is required"})
