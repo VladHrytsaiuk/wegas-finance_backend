@@ -175,4 +175,44 @@ func TestUserService(t *testing.T) {
 		assert.Equal(t, newFamID, updatedTx.FamilyID)
 		assert.Equal(t, clonedCat.ID, updatedTx.CategoryID)
 	})
+
+	t.Run("GetFamilyMembers", func(t *testing.T) {
+		familyID := "fam-list"
+		db.Create(&models.User{Base: models.Base{ID: "u-l1"}, FamilyID: familyID, Name: "User 1", Email: "l1@test.com"})
+		db.Create(&models.User{Base: models.Base{ID: "u-l2"}, FamilyID: familyID, Name: "User 2", Email: "l2@test.com"})
+		
+		user := &models.User{FamilyID: familyID}
+		members, err := service.GetFamilyMembers(user)
+		
+		assert.NoError(t, err)
+		assert.True(t, len(members) >= 2)
+	})
+
+	t.Run("UpdateUser", func(t *testing.T) {
+		familyID := "f-upd-real"
+		parent := &models.User{Base: models.Base{ID: "p-upd-real"}, RoleID: "admin", FamilyID: familyID}
+		child := &models.User{Base: models.Base{ID: "c-upd-real"}, FamilyID: familyID, Name: "Old Name", Email: "old@upd.com"}
+		
+		// Ensure clean state
+		db.Unscoped().Delete(&models.User{}, "id IN ?", []string{"p-upd-real", "c-upd-real"})
+		
+		err := db.Create(child).Error
+		assert.NoError(t, err)
+
+		input := CreateUserInput{Name: "New Name", RoleID: "parent", Email: "new@upd.com"}
+		updated, err := service.UpdateUser(parent, "c-upd-real", input)
+		
+		assert.NoError(t, err)
+		if updated != nil {
+			assert.Equal(t, "New Name", updated.Name)
+			assert.Equal(t, "parent", updated.RoleID)
+		}
+	})
+
+	t.Run("UpdateUser - Permission Denied", func(t *testing.T) {
+		childActor := &models.User{Base: models.Base{ID: "c-actor"}, RoleID: "child"}
+		_, err := service.UpdateUser(childActor, "any", CreateUserInput{})
+		assert.Error(t, err)
+		assert.Equal(t, ErrUserPermission, err)
+	})
 }

@@ -34,7 +34,12 @@ func NewCategoryController(service services.CategoryService) *CategoryController
 // @Router /categories [post]
 func (h *CategoryController) Create(c *gin.Context) {
 	// 1. Отримуємо юзера для перевірки прав
-	currentUser := c.MustGet("user").(*models.User)
+	currentUser, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	user := currentUser.(*models.User)
 
 	var input services.CategoryInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -42,7 +47,7 @@ func (h *CategoryController) Create(c *gin.Context) {
 		return
 	}
 
-	category, err := h.service.Create(input, currentUser)
+	category, err := h.service.Create(input, user)
 	if err != nil {
 		// Якщо помилка доступу (403) або інша (500)
 		status := http.StatusInternalServerError
@@ -68,9 +73,14 @@ func (h *CategoryController) Create(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal server error"
 // @Router /categories [get]
 func (h *CategoryController) GetAll(c *gin.Context) {
-	currentUser := c.MustGet("user").(*models.User)
+	currentUser, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	user := currentUser.(*models.User)
 
-	categories, err := h.service.GetAll(currentUser)
+	categories, err := h.service.GetAll(user)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -96,7 +106,12 @@ func (h *CategoryController) GetAll(c *gin.Context) {
 // @Router /categories/{id} [put]
 func (h *CategoryController) Update(c *gin.Context) {
 	id := c.Param("id")
-	currentUser := c.MustGet("user").(*models.User)
+	currentUser, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	user := currentUser.(*models.User)
 
 	var input services.CategoryInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -104,7 +119,7 @@ func (h *CategoryController) Update(c *gin.Context) {
 		return
 	}
 
-	category, err := h.service.Update(id, input, currentUser)
+	category, err := h.service.Update(id, input, user)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if err.Error() == "access denied: only parents can manage categories" {
@@ -132,9 +147,14 @@ func (h *CategoryController) Update(c *gin.Context) {
 // @Router /categories/{id} [delete]
 func (h *CategoryController) Delete(c *gin.Context) {
 	id := c.Param("id")
-	currentUser := c.MustGet("user").(*models.User)
+	currentUser, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	user := currentUser.(*models.User)
 
-	if err := h.service.Delete(id, currentUser); err != nil {
+	if err := h.service.Delete(id, user); err != nil {
 		status := http.StatusInternalServerError
 		if err.Error() == "access denied: only parents can manage categories" {
 			status = http.StatusForbidden
@@ -160,9 +180,14 @@ func (h *CategoryController) Delete(c *gin.Context) {
 // @Router /categories/{id} [get]
 func (h *CategoryController) GetOne(c *gin.Context) {
 	id := c.Param("id")
-	currentUser := c.MustGet("user").(*models.User)
+	currentUser, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	user := currentUser.(*models.User)
 
-	category, err := h.service.GetByID(id, currentUser)
+	category, err := h.service.GetByID(id, user)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Category not found"})
 		return

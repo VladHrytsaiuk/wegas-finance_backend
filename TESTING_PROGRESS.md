@@ -9,9 +9,9 @@
 | **utils** | 87.7% | ✅ Високе (додано Crypto та Parsers) |
 | **middlewares** | 83.8% | ✅ Високе покриття |
 | **repositories** | 63.8% | 🟡 Добре (додано Resilience) |
+| **controllers** | 46.6% | 🟡 Середнє (додано Error Handling) |
+| **services** | 44.3% | 🟡 Середнє (додано Security та User) |
 | **pkg/telegram** | 46.7% | 🟡 Базове тестування клієнта |
-| **services** | 43.7% | 🟡 Середнє (додано Security та Export) |
-| **controllers** | 42.9% | 🟡 Середнє (додано WSController) |
 | **services/parsers** | 32.8% | 🔴 Потребує більше прикладів виписок |
 
 ---
@@ -40,7 +40,7 @@
 
 ### Етап 12: Стрес-тести та Edge Cases
 - [x] **Resilience:** Тестування поведінки при розриві з'єднання з БД.
-- [x] **Security:** Перевірка безпеки (IDOR, Role-based Access) на рівні сервісів (Account, Category, Export).
+- [x] **Security:** Перевірка безпеки (IDOR, Role-based Access) на рівні сервісів (Account, Category, Export) та контролерів.
 - [ ] **Limits:** Перевірка лімітів завантаження великих PDF/CSV файлів.
 
 ---
