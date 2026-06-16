@@ -13,6 +13,8 @@ type Config struct {
 	UploadsDir   string
 	SecretKey    string
 	RegistrationCode string // <--- Додали
+	RPID             string
+	AppURL           string
 	
 	// Telegram
 	TgBotToken string
@@ -32,6 +34,8 @@ func LoadConfig() *Config {
 		UploadsDir:   getEnv("UPLOADS_DIR", "./uploads"),
 		SecretKey:        getEnv("JWT_SECRET", "secret"),
     RegistrationCode: getEnv("REGISTRATION_CODE", "admin"),
+		RPID:             getEnv("RP_ID", "localhost"),
+		AppURL:           getEnv("APP_URL", "http://localhost:3000"),
 		
 		TgBotToken:   getEnv("TG_BOT_TOKEN", ""),
 		TgChatID:     getEnv("TG_CHAT_ID", ""),

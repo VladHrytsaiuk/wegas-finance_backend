@@ -37,6 +37,7 @@ type AppControllers struct {
 	Wishlist     *controllers.WishlistController
 	Family       *controllers.FamilyController
 	WS           *controllers.WSController
+	WebAuthn     *controllers.WebAuthnController
 }
 
 func SetupRoutes(r *gin.Engine, c AppControllers, uploadsDir string, secretKey string) {
@@ -55,13 +56,23 @@ func SetupRoutes(r *gin.Engine, c AppControllers, uploadsDir string, secretKey s
 		// === PUBLIC ===
 		api.POST("/users", c.Auth.Register)
 		api.POST("/login", c.Auth.Login)
+		api.POST("/login/pin", c.Auth.LoginWithPIN)
 		api.POST("/feedback", c.Feedback.Submit)
 		api.POST("/monobank/webhook", c.Monobank.Webhook)
+
+		// WebAuthn Public Endpoints
+		api.POST("/webauthn/login/options", c.WebAuthn.LoginOptions)
+		api.POST("/webauthn/login/verify", c.WebAuthn.LoginVerify)
+		api.POST("/refresh", c.WebAuthn.Refresh)
 
 		// === PROTECTED ===
 		protected := api.Group("/")
 		protected.Use(middlewares.AuthMiddleware(secretKey))
 		{
+			// WebAuthn Protected Endpoints
+			protected.POST("/webauthn/register/options", c.WebAuthn.RegisterOptions)
+			protected.POST("/webauthn/register/verify", c.WebAuthn.RegisterVerify)
+
 			protected.GET("/ws", c.WS.HandleWS)
 
 			// --- DASHBOARD ---
@@ -78,6 +89,7 @@ func SetupRoutes(r *gin.Engine, c AppControllers, uploadsDir string, secretKey s
 			protected.GET("/users/me", c.User.GetMe)
 			protected.PUT("/users/me", c.User.UpdateProfile)
 			protected.PUT("/users/password", c.User.ChangePassword)
+			protected.POST("/users/pin", c.Auth.SetPIN)
 
 			protected.GET("/currencies", c.Currency.GetRates)
 

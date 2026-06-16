@@ -49,11 +49,10 @@ func (h *AuthController) Register(c *gin.Context) {
 		Name:       json.Name,
 		Email:      json.Email,
 		Password:   json.Password,
-		InviteCode: json.InviteCode, // 🔥
+		InviteCode: json.InviteCode,
 	})
 
 	if err != nil {
-		// Якщо помилка коду - 403 Forbidden
 		if err.Error() == "invalid invite code" {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Невірний код запрошення"})
 			return
@@ -61,6 +60,10 @@ func (h *AuthController) Register(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Set Refresh Token as HttpOnly cookie
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie("refresh_token", res.RefreshToken, 30*24*3600, "/", "", true, true)
 
 	c.JSON(http.StatusCreated, res)
 }
@@ -92,6 +95,53 @@ func (h *AuthController) Login(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Невірний логін або пароль"})
 		return
 	}
+
+	// Set Refresh Token as HttpOnly cookie
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie("refresh_token", res.RefreshToken, 30*24*3600, "/", "", true, true)
+
+	c.JSON(http.StatusOK, res)
+}
+
+func (h *AuthController) SetPIN(c *gin.Context) {
+	userID := c.GetString("userID")
+	var body struct {
+		PIN string `json:"pin" binding:"required,len=4"`
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ПІН має бути 4 цифри"})
+		return
+	}
+
+	if err := h.service.SetPIN(userID, body.PIN); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
+}
+
+func (h *AuthController) LoginWithPIN(c *gin.Context) {
+	var body struct {
+		Email string `json:"email" binding:"required,email"`
+		PIN   string `json:"pin" binding:"required,len=4"`
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Невірні дані"})
+		return
+	}
+
+	res, err := h.service.LoginWithPIN(body.Email, body.PIN)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Set Refresh Token as HttpOnly cookie
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie("refresh_token", res.RefreshToken, 30*24*3600, "/", "", true, true)
 
 	c.JSON(http.StatusOK, res)
 }

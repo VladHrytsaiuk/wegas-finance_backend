@@ -113,3 +113,44 @@ func TestAuthController_Register(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 }
+
+func TestAuthController_PIN(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	mockService := new(services.MockAuthService)
+	controller := NewAuthController(mockService)
+
+	r := gin.Default()
+	r.POST("/login/pin", controller.LoginWithPIN)
+	
+	// Middleware mock for SetPIN
+	protected := r.Group("/")
+	protected.Use(func(c *gin.Context) {
+		c.Set("userID", "user-123")
+		c.Next()
+	})
+	protected.POST("/users/pin", controller.SetPIN)
+
+	t.Run("LoginWithPIN Success", func(t *testing.T) {
+		expectedRes := &services.LoginResponse{
+			AccessToken: "pin-token",
+			User:        models.User{Email: "pin@test.com"},
+		}
+		mockService.On("LoginWithPIN", "pin@test.com", "1234").Return(expectedRes, nil).Once()
+
+		body := map[string]string{"email": "pin@test.com", "pin": "1234"}
+		w := PerformRequest(r, "POST", "/login/pin", body)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		mockService.AssertExpectations(t)
+	})
+
+	t.Run("SetPIN Success", func(t *testing.T) {
+		mockService.On("SetPIN", "user-123", "5678").Return(nil).Once()
+
+		body := map[string]string{"pin": "5678"}
+		w := PerformRequest(r, "POST", "/users/pin", body)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		mockService.AssertExpectations(t)
+	})
+}

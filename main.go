@@ -50,23 +50,24 @@ func (p *program) Stop(s service.Service) error {
 
 func main() {
 
+	///
 
-////////
+	// // 1. Отримуємо шлях до самого EXE файлу
+	// ex, err := os.Executable()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// // 2. Отримуємо папку цього файлу (відрізаємо wegas-finance.exe)
+	// exPath := filepath.Dir(ex)
 
-// ex, err := os.Executable()
-  // if err != nil {
-  //   log.Fatal(err)
-  // }
-  // // 2. Отримуємо папку цього файлу (відрізаємо wegas-finance.exe)
-  // exPath := filepath.Dir(ex)
-
+	// // 3. Змінюємо робочу директорію на папку з EXE
+	// // Це критично для Windows сервісів, які за замовчуванням стартують у System32
 	// if err := os.Chdir(exPath); err != nil {
-  //     log.Fatal(err)
-  // }
-  // log.Printf("📂 Working directory set to: %s", exPath)
+	// 	log.Fatal(err)
+	// }
+	// log.Printf("📂 Working directory set to: %s", exPath)
 
-	//////////
-
+///
 
 
 	svcConfig := &service.Config{
@@ -142,6 +143,7 @@ func startApp() {
 		&models.FamilyJoinCode{},
 		&models.MedicalRecord{},
 		&models.MedicalFile{},
+		&models.WebAuthnCredential{},
 	)
 	if err != nil {
 		log.Fatal("❌ Migration error:", err)
@@ -155,6 +157,7 @@ func startApp() {
 
 	// Ініціалізація всіх шарів (твій оригінальний код)
 	userRepo := repositories.NewUserRepository(db)
+	waRepo := repositories.NewWebAuthnRepository(db)
 	accountRepo := repositories.NewAccountRepository(db)
 	categoryRepo := repositories.NewCategoryRepository(db)
 	cpRepo := repositories.NewCounterpartyRepository(db)
@@ -181,8 +184,10 @@ func startApp() {
 	currencyService := services.NewCurrencyService(db)
 	categoryService := services.NewCategoryService(categoryRepo)
 	cpService := services.NewCounterpartyService(cpRepo)
+	jwtService := services.NewJWTService(cfg.SecretKey)
+
 	userService := services.NewUserService(userRepo, wsHub, db)
-	authService := services.NewAuthService(userRepo, cfg.SecretKey, cfg.RegistrationCode)
+	authService := services.NewAuthService(userRepo, jwtService, cfg.SecretKey, cfg.RegistrationCode)
 	accountService := services.NewAccountService(accountRepo, db)
 	tagService := services.NewTagService(tagRepo)
 	txService := services.NewTransactionService(db, txRepo, cpRepo, assetRepo, storageService, clock)
@@ -198,6 +203,11 @@ func startApp() {
 	shoppingService := services.NewShoppingService(shoppingRepo)
 	wishlistService := services.NewWishlistService(wishlistRepo) // <--- 3. ДОДАНО SERVICE
 	familyJoinService := services.NewFamilyJoinService(familyJoinRepo, userRepo, wsHub, db)
+
+	waService, err := services.NewWebAuthnService(cfg.RPID, cfg.AppURL, waRepo, userRepo)
+	if err != nil {
+		log.Fatal("❌ WebAuthn init error:", err)
+	}
 
 	startSchedulers(db, goalService, currencyService, monobankService)
 
@@ -216,6 +226,7 @@ func startApp() {
 		Wishlist:     controllers.NewWishlistController(wishlistService), // <--- 4. ДОДАНО КОНТРОЛЕР
 		Family:       controllers.NewFamilyController(familyJoinService),
 		WS:           controllers.NewWSController(wsHub),
+		WebAuthn:     controllers.NewWebAuthnController(waService, jwtService, userRepo),
 	}
 
 	r := gin.Default()

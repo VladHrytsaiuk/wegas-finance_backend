@@ -31,6 +31,12 @@ type User struct {
 	Language     string `json:"language" gorm:"default:'uk'"`
 	Theme        string `json:"theme" gorm:"default:'light'"`
 
+	// PIN Authentication
+	PinHash           string `json:"-"`
+	FailedPinAttempts int    `json:"-" gorm:"default:0"`
+	PinLockedUntil    int64  `json:"-" gorm:"default:0"`
+	LastPinAttemptAt  int64  `json:"-" gorm:"default:0"`
+
 	// Relations
 	Role   Role   `json:"role" gorm:"foreignKey:RoleID"`
 	Family Family `json:"family" gorm:"foreignKey:FamilyID"`

@@ -24,24 +24,30 @@ type LoginInput struct {
 }
 
 type LoginResponse struct {
-	Token string      `json:"token"`
-	User  models.User `json:"user"`
+	Token        string      `json:"token"` // Legacy field
+	AccessToken  string      `json:"access_token,omitempty"`
+	RefreshToken string      `json:"refresh_token,omitempty"`
+	User         models.User `json:"user"`
 }
 
 type AuthService interface {
 	Register(input RegisterInput) (*LoginResponse, error)
 	Login(input LoginInput) (*LoginResponse, error)
+	SetPIN(userID, pin string) error
+	LoginWithPIN(email, pin string) (*LoginResponse, error)
 }
 
 type authService struct {
 	userRepo   repositories.UserRepository
+	jwtService JWTService // 🔥 Added JWTService
 	secretKey  string
 	inviteCode string
 }
 
-func NewAuthService(userRepo repositories.UserRepository, secretKey, inviteCode string) AuthService {
+func NewAuthService(userRepo repositories.UserRepository, jwtService JWTService, secretKey, inviteCode string) AuthService {
 	return &authService{
 		userRepo:   userRepo,
+		jwtService: jwtService,
 		secretKey:  secretKey,
 		inviteCode: inviteCode,
 	}
@@ -105,7 +111,6 @@ func (s *authService) Register(input RegisterInput) (*LoginResponse, error) {
 	
 	// А. Створюємо категорії (Продукти, Транспорт...)
 	if err := utils.SeedFamilyDefaults(db, family.ID); err != nil {
-		// Логуємо помилку, але не зупиняємо реєстрацію (не критично)
 		// log.Println("Error seeding categories:", err)
 	}
 
@@ -115,12 +120,15 @@ func (s *authService) Register(input RegisterInput) (*LoginResponse, error) {
 	}
 
 	// 5. Генерація токена
-	token, err := utils.GenerateToken(user.ID, user.FamilyID, user.RoleID, s.secretKey)
-	if err != nil {
-		return nil, err
-	}
+	accessToken, _ := s.jwtService.GenerateAccessToken(user.ID, user.FamilyID, user.RoleID)
+	refreshToken, _ := s.jwtService.GenerateRefreshToken(user.ID, user.FamilyID, user.RoleID)
 
-	return &LoginResponse{Token: token, User: user}, nil
+	return &LoginResponse{
+		Token:        accessToken,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		User:         user,
+	}, nil
 }
 
 func (s *authService) Login(input LoginInput) (*LoginResponse, error) {
@@ -133,10 +141,83 @@ func (s *authService) Login(input LoginInput) (*LoginResponse, error) {
 		return nil, errors.New("invalid credentials")
 	}
 
-	token, err := utils.GenerateToken(user.ID, user.FamilyID, user.RoleID, s.secretKey)
-	if err != nil {
-		return nil, err
+	accessToken, _ := s.jwtService.GenerateAccessToken(user.ID, user.FamilyID, user.RoleID)
+	refreshToken, _ := s.jwtService.GenerateRefreshToken(user.ID, user.FamilyID, user.RoleID)
+
+	return &LoginResponse{
+		Token:        accessToken,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		User:         *user,
+	}, nil
+}
+
+func (s *authService) SetPIN(userID, pin string) error {
+	if len(pin) != 4 {
+		return errors.New("PIN must be exactly 4 digits")
 	}
 
-	return &LoginResponse{Token: token, User: *user}, nil
+	hashedPin, err := utils.HashPassword(pin) // We can reuse bcrypt for PIN
+	if err != nil {
+		return err
+	}
+
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return err
+	}
+
+	user.PinHash = hashedPin
+	return s.userRepo.Update(user)
+}
+
+func (s *authService) LoginWithPIN(email, pin string) (*LoginResponse, error) {
+	user, err := s.userRepo.GetByEmail(email)
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
+
+	if user.PinHash == "" {
+		return nil, errors.New("PIN login not set up for this user")
+	}
+
+	now := time.Now().Unix()
+
+	// 1. Брутфорс: Перевірка блокування (наприклад, 15 хв після 5 спроб)
+	if user.PinLockedUntil > now {
+		return nil, errors.New("PIN login temporarily locked")
+	}
+
+	// 2. Брутфорс: Перевірка інтервалу (2 рази на 5 секунд)
+	if now-user.LastPinAttemptAt < 2 {
+		return nil, errors.New("too many attempts, wait a second")
+	}
+
+	user.LastPinAttemptAt = now
+
+	// 3. Перевірка ПІН
+	if !utils.CheckPassword(pin, user.PinHash) {
+		user.FailedPinAttempts++
+		if user.FailedPinAttempts >= 5 {
+			user.PinLockedUntil = now + 900 // 15 хвилин
+			user.FailedPinAttempts = 0     // Скидаємо після блокування
+		}
+		s.userRepo.Update(user)
+		return nil, errors.New("invalid PIN")
+	}
+
+	// Успішний вхід - скидаємо лічильники
+	user.FailedPinAttempts = 0
+	user.PinLockedUntil = 0
+	s.userRepo.Update(user)
+
+	accessToken, _ := s.jwtService.GenerateAccessToken(user.ID, user.FamilyID, user.RoleID)
+	refreshToken, _ := s.jwtService.GenerateRefreshToken(user.ID, user.FamilyID, user.RoleID)
+
+	return &LoginResponse{
+		Token:        accessToken,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		User:         *user,
+	}, nil
 }
