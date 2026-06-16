@@ -16,7 +16,8 @@ func TestAuthService(t *testing.T) {
 	t.Run("Register Success", func(t *testing.T) {
 		db, _ := repositories.SetupTestDB()
 		userRepo := repositories.NewUserRepository(db)
-		service := NewAuthService(userRepo, jwtService, secretKey, inviteCode)
+		waRepo := repositories.NewWebAuthnRepository(db)
+		service := NewAuthService(userRepo, waRepo, jwtService, secretKey, inviteCode)
 
 		input := RegisterInput{
 			Name:       "Test User",
@@ -35,7 +36,8 @@ func TestAuthService(t *testing.T) {
 	t.Run("Register Invalid Invite Code", func(t *testing.T) {
 		db, _ := repositories.SetupTestDB()
 		userRepo := repositories.NewUserRepository(db)
-		service := NewAuthService(userRepo, jwtService, secretKey, inviteCode)
+		waRepo := repositories.NewWebAuthnRepository(db)
+		service := NewAuthService(userRepo, waRepo, jwtService, secretKey, inviteCode)
 
 		input := RegisterInput{
 			Name:       "Test User",
@@ -52,7 +54,8 @@ func TestAuthService(t *testing.T) {
 	t.Run("Login Success", func(t *testing.T) {
 		db, _ := repositories.SetupTestDB()
 		userRepo := repositories.NewUserRepository(db)
-		service := NewAuthService(userRepo, jwtService, secretKey, inviteCode)
+		waRepo := repositories.NewWebAuthnRepository(db)
+		service := NewAuthService(userRepo, waRepo, jwtService, secretKey, inviteCode)
 
 		// Register first
 		regInput := RegisterInput{
@@ -77,7 +80,8 @@ func TestAuthService(t *testing.T) {
 	t.Run("Login Invalid Credentials", func(t *testing.T) {
 		db, _ := repositories.SetupTestDB()
 		userRepo := repositories.NewUserRepository(db)
-		service := NewAuthService(userRepo, jwtService, secretKey, inviteCode)
+		waRepo := repositories.NewWebAuthnRepository(db)
+		service := NewAuthService(userRepo, waRepo, jwtService, secretKey, inviteCode)
 
 		loginInput := LoginInput{
 			Email:    "nonexistent@example.com",
@@ -91,8 +95,10 @@ func TestAuthService(t *testing.T) {
 	t.Run("PIN Logic", func(t *testing.T) {
 		db, _ := repositories.SetupTestDB()
 		userRepo := repositories.NewUserRepository(db)
-		service := NewAuthService(userRepo, jwtService, secretKey, inviteCode)
+		waRepo := repositories.NewWebAuthnRepository(db)
+		service := NewAuthService(userRepo, waRepo, jwtService, secretKey, inviteCode)
 
+		
 		regInput := RegisterInput{
 			Name: "PIN User", Email: "pin@test.com", Password: "password123", InviteCode: inviteCode,
 		}
