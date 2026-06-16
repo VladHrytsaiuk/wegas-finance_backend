@@ -34,7 +34,7 @@ type User struct {
 	// Security flags (calculated)
 	HasPassword       bool   `json:"has_password" gorm:"-"`
 	HasPin            bool   `json:"has_pin" gorm:"-"`
-	HasPasskey        bool   `json:"has_passkey" gorm:"-"`
+	HasPasskeys       bool   `json:"has_passkeys" gorm:"-"`
 
 	// PIN Authentication
 	PinHash           string `json:"-"`
