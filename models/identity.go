@@ -23,13 +23,18 @@ type User struct {
 	
 	Name         string `json:"name"`
 	Email        string `json:"email" gorm:"uniqueIndex"` // Додав unique
-	PasswordHash string `json:"password_hash"`
+	PasswordHash string `json:"-"`
 	AvatarURL    string `json:"avatar_url"`
 	
 	// Налаштування користувача
 	BaseCurrency string `json:"base_currency" gorm:"default:'UAH'"`
 	Language     string `json:"language" gorm:"default:'uk'"`
 	Theme        string `json:"theme" gorm:"default:'light'"`
+
+	// Security flags (calculated)
+	HasPassword       bool   `json:"has_password" gorm:"-"`
+	HasPin            bool   `json:"has_pin" gorm:"-"`
+	HasPasskey        bool   `json:"has_passkey" gorm:"-"`
 
 	// PIN Authentication
 	PinHash           string `json:"-"`

@@ -88,6 +88,7 @@ func SetupRoutes(r *gin.Engine, c AppControllers, uploadsDir string, secretKey s
 			// --- PROFILE & USERS ---
 			protected.GET("/users/me", c.User.GetMe)
 			protected.PUT("/users/me", c.User.UpdateProfile)
+			protected.GET("/users/security-status", c.Auth.GetSecurityStatus)
 			protected.PUT("/users/password", c.User.ChangePassword)
 			protected.POST("/users/pin", c.Auth.SetPIN)
 

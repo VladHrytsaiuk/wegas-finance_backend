@@ -187,7 +187,7 @@ func startApp() {
 	jwtService := services.NewJWTService(cfg.SecretKey)
 
 	userService := services.NewUserService(userRepo, wsHub, db)
-	authService := services.NewAuthService(userRepo, jwtService, cfg.SecretKey, cfg.RegistrationCode)
+	authService := services.NewAuthService(userRepo, waRepo, jwtService, cfg.SecretKey, cfg.RegistrationCode)
 	accountService := services.NewAccountService(accountRepo, db)
 	tagService := services.NewTagService(tagRepo)
 	txService := services.NewTransactionService(db, txRepo, cpRepo, assetRepo, storageService, clock)

@@ -3,6 +3,7 @@ package controllers
 import (
 	"net/http"
 
+	"github.com/VladHrytsaiuk/wegas-finance/backend/database"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/services"
 	"github.com/gin-gonic/gin"
@@ -18,7 +19,7 @@ func NewUserController(service services.UserService) *UserController {
 
 // GetMe godoc
 // @Summary Get current user profile
-// @Description Returns the profile of the currently authenticated user.
+// @Description Returns the profile of the currently logged-in user.
 // @Tags Users
 // @Accept json
 // @Produce json
@@ -29,8 +30,18 @@ func NewUserController(service services.UserService) *UserController {
 func (h *UserController) GetMe(c *gin.Context) {
 	// Беремо з контексту, це найшвидший спосіб
 	user := c.MustGet("user").(*models.User)
+
+	// Наповнюємо прапорці безпеки
+	user.HasPassword = user.PasswordHash != ""
+	user.HasPin = user.PinHash != ""
+
+	var passkeyCount int64
+	database.DB.Model(&models.WebAuthnCredential{}).Where("user_id = ?", user.ID).Count(&passkeyCount)
+	user.HasPasskey = passkeyCount > 0
+
 	c.JSON(http.StatusOK, user)
 }
+
 
 // GetFamilyMembers godoc
 // @Summary Get family members

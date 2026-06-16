@@ -629,6 +629,14 @@ func (m *MockAuthService) LoginWithPIN(email, pin string) (*LoginResponse, error
 	return args.Get(0).(*LoginResponse), args.Error(1)
 }
 
+func (m *MockAuthService) GetSecurityStatus(userID string) (*SecurityStatus, error) {
+	args := m.Called(userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*SecurityStatus), args.Error(1)
+}
+
 // MockMonobankService
 type MockMonobankService struct {
 	mock.Mock

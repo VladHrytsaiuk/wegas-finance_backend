@@ -145,3 +145,19 @@ func (h *AuthController) LoginWithPIN(c *gin.Context) {
 
 	c.JSON(http.StatusOK, res)
 }
+
+func (h *AuthController) GetSecurityStatus(c *gin.Context) {
+	userID := c.GetString("userID")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	status, err := h.service.GetSecurityStatus(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, status)
+}

@@ -30,23 +30,32 @@ type LoginResponse struct {
 	User         models.User `json:"user"`
 }
 
+type SecurityStatus struct {
+	HasPassword  bool `json:"has_password"`
+	HasPIN       bool `json:"has_pin"`
+	HasPasskeys  bool `json:"has_passkeys"`
+}
+
 type AuthService interface {
 	Register(input RegisterInput) (*LoginResponse, error)
 	Login(input LoginInput) (*LoginResponse, error)
 	SetPIN(userID, pin string) error
 	LoginWithPIN(email, pin string) (*LoginResponse, error)
+	GetSecurityStatus(userID string) (*SecurityStatus, error)
 }
 
 type authService struct {
-	userRepo   repositories.UserRepository
-	jwtService JWTService // 🔥 Added JWTService
-	secretKey  string
-	inviteCode string
+	userRepo    repositories.UserRepository
+	waRepo      repositories.WebAuthnRepository
+	jwtService  JWTService
+	secretKey   string
+	inviteCode  string
 }
 
-func NewAuthService(userRepo repositories.UserRepository, jwtService JWTService, secretKey, inviteCode string) AuthService {
+func NewAuthService(userRepo repositories.UserRepository, waRepo repositories.WebAuthnRepository, jwtService JWTService, secretKey, inviteCode string) AuthService {
 	return &authService{
 		userRepo:   userRepo,
+		waRepo:     waRepo,
 		jwtService: jwtService,
 		secretKey:  secretKey,
 		inviteCode: inviteCode,
@@ -169,6 +178,24 @@ func (s *authService) SetPIN(userID, pin string) error {
 
 	user.PinHash = hashedPin
 	return s.userRepo.Update(user)
+}
+
+func (s *authService) GetSecurityStatus(userID string) (*SecurityStatus, error) {
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	creds, err := s.waRepo.GetCredentialsByUserID(userID)
+	if err != nil {
+		creds = []models.WebAuthnCredential{}
+	}
+
+	return &SecurityStatus{
+		HasPassword: user.PasswordHash != "",
+		HasPIN:      user.PinHash != "",
+		HasPasskeys: len(creds) > 0,
+	}, nil
 }
 
 func (s *authService) LoginWithPIN(email, pin string) (*LoginResponse, error) {
