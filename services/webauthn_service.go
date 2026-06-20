@@ -17,9 +17,9 @@ import (
 
 type WebAuthnService interface {
 	BeginRegistration(user *models.User) (*protocol.CredentialCreation, string, error)
-	FinishRegistration(user *models.User, sessionID string, responseData json.RawMessage) error
+	FinishRegistration(user *models.User, sessionID string, responseData json.RawMessage, origin string) error
 	BeginLogin(email string) (*protocol.CredentialAssertion, string, error)
-	FinishLogin(sessionID string, responseData json.RawMessage) (*models.User, error)
+	FinishLogin(sessionID string, responseData json.RawMessage, origin string) (*models.User, error)
 }
 
 type webAuthnService struct {
@@ -98,7 +98,7 @@ func (s *webAuthnService) BeginRegistration(user *models.User) (*protocol.Creden
 	return options, sessionID, nil
 }
 
-func (s *webAuthnService) FinishRegistration(user *models.User, sessionID string, responseData json.RawMessage) error {
+func (s *webAuthnService) FinishRegistration(user *models.User, sessionID string, responseData json.RawMessage, origin string) error {
 	s.sessionMu.RLock()
 	sessionData, ok := s.sessions[sessionID]
 	s.sessionMu.RUnlock()
@@ -112,9 +112,14 @@ func (s *webAuthnService) FinishRegistration(user *models.User, sessionID string
 		return err
 	}
 
-	// Create a dummy request to satisfy the library's FinishRegistration
+	// Створюємо запит з правильним Origin для перевірки бібліотекою
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(responseData))
 	req.Header.Set("Content-Type", "application/json")
+	if origin != "" {
+		req.Header.Set("Origin", origin)
+	}
+	// Host має бути саме доменним ім'ям (RPID), а не повним URL
+	req.Host = s.web.Config.RPID
 
 	credential, err := s.web.FinishRegistration(waUser, sessionData, req)
 	if err != nil {
@@ -160,7 +165,7 @@ func (s *webAuthnService) BeginLogin(email string) (*protocol.CredentialAssertio
 	return options, sessionID, nil
 }
 
-func (s *webAuthnService) FinishLogin(sessionID string, responseData json.RawMessage) (*models.User, error) {
+func (s *webAuthnService) FinishLogin(sessionID string, responseData json.RawMessage, origin string) (*models.User, error) {
 	s.sessionMu.RLock()
 	sessionData, ok := s.sessions[sessionID]
 	userID, userOk := s.sessionUsers[sessionID]
@@ -180,9 +185,13 @@ func (s *webAuthnService) FinishLogin(sessionID string, responseData json.RawMes
 		return nil, err
 	}
 
-	// Create a dummy request to satisfy the library's FinishLogin
+	// Створюємо запит з правильним Origin
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(responseData))
 	req.Header.Set("Content-Type", "application/json")
+	if origin != "" {
+		req.Header.Set("Origin", origin)
+		req.Host = origin
+	}
 
 	credential, err := s.web.FinishLogin(waUser, sessionData, req)
 	if err != nil {

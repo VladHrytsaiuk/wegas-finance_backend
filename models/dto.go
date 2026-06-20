@@ -133,3 +133,12 @@ type UpdateWishlistRequest struct {
 	HiddenFrom *string `json:"hidden_from"`
 	GoalID     *string `json:"goal_id"`
 }
+
+// BackupDTO - для експорту всієї бази даних користувача
+type BackupDTO struct {
+	Accounts       []Account      `json:"accounts"`
+	Categories     []Category     `json:"categories"`
+	Counterparties []Counterparty `json:"counterparties"`
+	Tags           []Tag          `json:"tags"`
+	Transactions   []Transaction  `json:"transactions"`
+}

@@ -68,7 +68,10 @@ func (ctrl *WebAuthnController) RegisterVerify(c *gin.Context) {
 		return
 	}
 
-	if err := ctrl.waService.FinishRegistration(user, body.SessionID, body.Response); err != nil {
+	// Отримуємо Origin з запиту
+	origin := c.Request.Header.Get("Origin")
+
+	if err := ctrl.waService.FinishRegistration(user, body.SessionID, body.Response, origin); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -111,7 +114,10 @@ func (ctrl *WebAuthnController) LoginVerify(c *gin.Context) {
 		return
 	}
 
-	user, err := ctrl.waService.FinishLogin(body.SessionID, body.Response)
+	// Отримуємо Origin з запиту
+	origin := c.Request.Header.Get("Origin")
+
+	user, err := ctrl.waService.FinishLogin(body.SessionID, body.Response, origin)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return

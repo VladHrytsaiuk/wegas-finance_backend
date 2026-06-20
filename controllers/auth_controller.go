@@ -161,3 +161,21 @@ func (h *AuthController) GetSecurityStatus(c *gin.Context) {
 
 	c.JSON(http.StatusOK, status)
 }
+
+func (h *AuthController) RemovePIN(c *gin.Context) {
+	userID := c.GetString("userID")
+	if err := h.service.RemovePIN(userID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
+}
+
+func (h *AuthController) RemovePasskeys(c *gin.Context) {
+	userID := c.GetString("userID")
+	if err := h.service.RemovePasskeys(userID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
+}

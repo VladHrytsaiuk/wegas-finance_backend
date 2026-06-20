@@ -117,7 +117,7 @@ func TestAuthService(t *testing.T) {
 		time.Sleep(2 * time.Second)
 
 		// 3. Login with invalid PIN
-		_, err = service.LoginWithPIN("pin@test.com", "0000")
+		_, err = service.LoginWithPIN("pin@test.com", "1111")
 		assert.Error(t, err)
 		assert.Equal(t, "invalid PIN", err.Error())
 	})

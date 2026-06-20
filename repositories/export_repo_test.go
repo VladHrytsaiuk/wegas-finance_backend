@@ -29,4 +29,12 @@ func TestExportRepository(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Len(t, txs, 1)
 	})
+
+	t.Run("GetBackupData", func(t *testing.T) {
+		backup, err := repo.GetBackupData(familyID, "", false)
+		assert.NoError(t, err)
+		assert.NotNil(t, backup)
+		assert.Len(t, backup.Transactions, 1)
+		assert.Len(t, backup.Accounts, 0)
+	})
 }

@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -72,4 +73,39 @@ func (c *ExportController) ExportTransactions(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, data)
+}
+
+// ExportBackup godoc
+// @Summary Export entire user database (backup)
+// @Description Returns a complete JSON dump of user accounts, categories, counterparties, tags, and transactions.
+// @Tags Export
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {object} models.BackupDTO
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 403 {object} map[string]string "Forbidden"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /export/backup [get]
+func (c *ExportController) ExportBackup(ctx *gin.Context) {
+	currentUser := ctx.MustGet("user").(*models.User)
+
+	data, err := c.service.GetBackup(currentUser)
+	if err != nil {
+		fmt.Println("EXPORT BACKUP ERROR:", err.Error())
+		// If error is related to access denied (child user)
+		if strings.Contains(err.Error(), "access denied") {
+			ctx.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.Header("Content-Disposition", "attachment; filename=backup.json")
+	ctx.Header("Content-Type", "application/json")
+
+	encoder := json.NewEncoder(ctx.Writer)
+	if err := encoder.Encode(data); err != nil {
+		fmt.Println("EXPORT BACKUP STREAM ERROR:", err.Error())
+	}
 }

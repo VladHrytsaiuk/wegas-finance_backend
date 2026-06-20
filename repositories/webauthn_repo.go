@@ -10,6 +10,7 @@ type WebAuthnRepository interface {
 	GetCredentialsByUserID(userID string) ([]models.WebAuthnCredential, error)
 	GetCredentialByID(credentialID []byte) (*models.WebAuthnCredential, error)
 	UpdateCredential(cred *models.WebAuthnCredential) error
+	DeleteCredentialsByUserID(userID string) error
 }
 
 type webAuthnRepository struct {
@@ -41,4 +42,8 @@ func (r *webAuthnRepository) GetCredentialByID(credentialID []byte) (*models.Web
 
 func (r *webAuthnRepository) UpdateCredential(cred *models.WebAuthnCredential) error {
 	return r.db.Save(cred).Error
+}
+
+func (r *webAuthnRepository) DeleteCredentialsByUserID(userID string) error {
+	return r.db.Where("user_id = ?", userID).Delete(&models.WebAuthnCredential{}).Error
 }

@@ -32,4 +32,18 @@ func TestExportController(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		mockService.AssertExpectations(t)
 	})
+
+	r.GET("/export/backup", controller.ExportBackup)
+
+	t.Run("Backup Success", func(t *testing.T) {
+		mockService.On("GetBackup", mock.Anything).Return(&models.BackupDTO{
+			Transactions: []models.Transaction{{Amount: 100}},
+		}, nil).Once()
+
+		w := PerformRequest(r, "GET", "/export/backup", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+		assert.Equal(t, "attachment; filename=backup.json", w.Header().Get("Content-Disposition"))
+		mockService.AssertExpectations(t)
+	})
 }

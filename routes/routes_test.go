@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/VladHrytsaiuk/wegas-finance/backend/controllers"
+	"github.com/VladHrytsaiuk/wegas-finance/backend/pkg/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
@@ -39,9 +40,15 @@ func TestSetupRoutes(t *testing.T) {
 		Wishlist:     &controllers.WishlistController{},
 		Family:       &controllers.FamilyController{},
 		WS:           &controllers.WSController{},
+		WebAuthn:     &controllers.WebAuthnController{},
 	}
 
-	SetupRoutes(r, c, "./uploads", "secret")
+	cfg := &config.Config{
+		UploadsDir: "./uploads",
+		SecretKey:  "secret",
+	}
+
+	SetupRoutes(r, c, cfg)
 
 	// Verify some critical routes exist in the engine
 	routes := r.Routes()

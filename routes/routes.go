@@ -6,6 +6,7 @@ import (
 	"github.com/VladHrytsaiuk/wegas-finance/backend/controllers"
 	_ "github.com/VladHrytsaiuk/wegas-finance/backend/docs"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/middlewares"
+	"github.com/VladHrytsaiuk/wegas-finance/backend/pkg/config"
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -40,13 +41,11 @@ type AppControllers struct {
 	WebAuthn     *controllers.WebAuthnController
 }
 
-func SetupRoutes(r *gin.Engine, c AppControllers, uploadsDir string, secretKey string) {
+func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 
-	_ = os.MkdirAll("./uploads", 0755)
+	_ = os.MkdirAll(cfg.UploadsDir, 0755)
 
-  // 2. Жорстко вказуємо: папка uploads лежить тут ("./uploads")
-  // StaticFS краще працює з браузерами, ніж просто Static
-  r.StaticFS("/uploads", gin.Dir("./uploads", true))
+  r.StaticFS("/uploads", gin.Dir(cfg.UploadsDir, true))
 	
 	// Swagger UI
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
@@ -54,6 +53,13 @@ func SetupRoutes(r *gin.Engine, c AppControllers, uploadsDir string, secretKey s
 	api := r.Group("/api")
 	{
 		// === PUBLIC ===
+		api.GET("/system/info", func(ctx *gin.Context) {
+			ctx.JSON(200, gin.H{
+				"rp_id":   cfg.RPID,
+				"app_url": cfg.AppURL,
+				"status":  "running",
+			})
+		})
 		api.POST("/users", c.Auth.Register)
 		api.POST("/login", c.Auth.Login)
 		api.POST("/login/pin", c.Auth.LoginWithPIN)
@@ -67,7 +73,7 @@ func SetupRoutes(r *gin.Engine, c AppControllers, uploadsDir string, secretKey s
 
 		// === PROTECTED ===
 		protected := api.Group("/")
-		protected.Use(middlewares.AuthMiddleware(secretKey))
+		protected.Use(middlewares.AuthMiddleware(cfg.SecretKey))
 		{
 			// WebAuthn Protected Endpoints
 			protected.POST("/webauthn/register/options", c.WebAuthn.RegisterOptions)
@@ -83,6 +89,7 @@ func SetupRoutes(r *gin.Engine, c AppControllers, uploadsDir string, secretKey s
 
 			// --- EXPORT / IMPORT ---
 			protected.GET("/export/transactions", c.Export.ExportTransactions)
+			protected.GET("/export/backup", c.Export.ExportBackup)
 			protected.POST("/import/upload", c.Import.UploadStatement)
 
 			// --- PROFILE & USERS ---
@@ -91,6 +98,8 @@ func SetupRoutes(r *gin.Engine, c AppControllers, uploadsDir string, secretKey s
 			protected.GET("/users/security-status", c.Auth.GetSecurityStatus)
 			protected.PUT("/users/password", c.User.ChangePassword)
 			protected.POST("/users/pin", c.Auth.SetPIN)
+			protected.DELETE("/users/pin", c.Auth.RemovePIN)
+			protected.DELETE("/users/passkeys", c.Auth.RemovePasskeys)
 
 			protected.GET("/currencies", c.Currency.GetRates)
 

@@ -9,6 +9,7 @@ import (
 
 type ExportRepository interface {
 	GetTransactionsForExport(familyID string, filter models.ExportFilterDTO) ([]models.Transaction, error)
+	GetBackupData(familyID string, userID string, isChild bool) (*models.BackupDTO, error)
 }
 
 type exportRepo struct {
@@ -64,4 +65,57 @@ func (r *exportRepo) GetTransactionsForExport(familyID string, filter models.Exp
 	}
 
 	return transactions, err
+}
+
+func (r *exportRepo) GetBackupData(familyID string, userID string, isChild bool) (*models.BackupDTO, error) {
+	var accounts []models.Account
+	var categories []models.Category
+	var counterparties []models.Counterparty
+	var tags []models.Tag
+	var transactions []models.Transaction
+
+	if err := r.db.Where("family_id = ? AND deleted_at IS NULL", familyID).Find(&accounts).Error; err != nil {
+		return nil, err
+	}
+
+	if err := r.db.Where("family_id = ? AND deleted_at IS NULL", familyID).Find(&categories).Error; err != nil {
+		return nil, err
+	}
+
+	if err := r.db.Where("family_id = ? AND deleted_at IS NULL", familyID).Find(&counterparties).Error; err != nil {
+		return nil, err
+	}
+
+	if err := r.db.Where("family_id = ? AND deleted_at IS NULL", familyID).Find(&tags).Error; err != nil {
+		return nil, err
+	}
+
+	txQuery := r.db.Model(&models.Transaction{}).
+		Where("family_id = ? AND deleted_at IS NULL", familyID)
+
+	if isChild {
+		txQuery = txQuery.Where("user_id = ?", userID)
+	}
+
+	err := txQuery.
+		Preload("Account").
+		Preload("Category").
+		Preload("Counterparty").
+		Preload("Tags").
+		Preload("Items").
+		Preload("User").
+		Order("date DESC").
+		Find(&transactions).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.BackupDTO{
+		Accounts:       accounts,
+		Categories:     categories,
+		Counterparties: counterparties,
+		Tags:           tags,
+		Transactions:   transactions,
+	}, nil
 }

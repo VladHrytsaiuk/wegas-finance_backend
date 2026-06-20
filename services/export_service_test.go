@@ -38,6 +38,27 @@ func TestExportService(t *testing.T) {
 		assert.NoError(t, err)
 		mockRepo.AssertExpectations(t)
 	})
-}
+	t.Run("GetBackup - Normal User", func(t *testing.T) {
+		user := &models.User{Base: models.Base{ID: "u-1"}, FamilyID: "f-1", RoleID: "admin"}
 
-// MockExportRepository is needed here. I'll add it to mocks.go if it's missing.
+		mockRepo.On("GetBackupData", "f-1", "u-1", false).Return(&models.BackupDTO{
+			Transactions: []models.Transaction{{Base: models.Base{ID: "tx-1"}}},
+		}, nil).Once()
+
+		res, err := service.GetBackup(user)
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
+		assert.Len(t, res.Transactions, 1)
+		mockRepo.AssertExpectations(t)
+	})
+
+	t.Run("GetBackup - Child Role Protection", func(t *testing.T) {
+		user := &models.User{Base: models.Base{ID: "u-child"}, FamilyID: "f-1", RoleID: "child"}
+
+		res, err := service.GetBackup(user)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "access denied")
+		assert.Nil(t, res)
+		mockRepo.AssertExpectations(t)
+	})
+}

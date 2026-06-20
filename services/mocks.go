@@ -637,6 +637,16 @@ func (m *MockAuthService) GetSecurityStatus(userID string) (*SecurityStatus, err
 	return args.Get(0).(*SecurityStatus), args.Error(1)
 }
 
+func (m *MockAuthService) RemovePIN(userID string) error {
+	args := m.Called(userID)
+	return args.Error(0)
+}
+
+func (m *MockAuthService) RemovePasskeys(userID string) error {
+	args := m.Called(userID)
+	return args.Error(0)
+}
+
 // MockMonobankService
 type MockMonobankService struct {
 	mock.Mock
@@ -1029,6 +1039,14 @@ func (m *MockExportService) GetTransactions(user *models.User, filter models.Exp
 	return args.Get(0).([]models.Transaction), args.Error(1)
 }
 
+func (m *MockExportService) GetBackup(user *models.User) (*models.BackupDTO, error) {
+	args := m.Called(user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.BackupDTO), args.Error(1)
+}
+
 // MockFeedbackService
 type MockFeedbackService struct {
 	mock.Mock
@@ -1067,6 +1085,14 @@ type MockExportRepository struct {
 func (m *MockExportRepository) GetTransactionsForExport(familyID string, filter models.ExportFilterDTO) ([]models.Transaction, error) {
 	args := m.Called(familyID, filter)
 	return args.Get(0).([]models.Transaction), args.Error(1)
+}
+
+func (m *MockExportRepository) GetBackupData(familyID string, userID string, isChild bool) (*models.BackupDTO, error) {
+	args := m.Called(familyID, userID, isChild)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.BackupDTO), args.Error(1)
 }
 
 // MockImportService

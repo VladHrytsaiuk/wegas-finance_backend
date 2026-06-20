@@ -36,7 +36,9 @@ func (h *UserController) GetMe(c *gin.Context) {
 	user.HasPin = user.PinHash != ""
 
 	var passkeyCount int64
-	database.DB.Model(&models.WebAuthnCredential{}).Where("user_id = ?", user.ID).Count(&passkeyCount)
+	if database.DB != nil {
+		database.DB.Model(&models.WebAuthnCredential{}).Where("user_id = ?", user.ID).Count(&passkeyCount)
+	}
 	user.HasPasskeys = passkeyCount > 0
 
 	c.JSON(http.StatusOK, user)

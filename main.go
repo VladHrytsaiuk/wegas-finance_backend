@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"os"
-	"path/filepath"
 
 	// 🔥 ДОДАЙ ЦЕЙ ІМПОРТ
 	"time"
@@ -53,22 +52,22 @@ func main() {
 
 	///
 
-	// 1. Отримуємо шлях до самого EXE файлу
-	ex, err := os.Executable()
-	if err != nil {
-		log.Fatal(err)
-	}
-	// 2. Отримуємо папку цього файлу (відрізаємо wegas-finance.exe)
-	exPath := filepath.Dir(ex)
+	// // // 1. Отримуємо шлях до самого EXE файлу
+	// ex, err := os.Executable()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// // 2. Отримуємо папку цього файлу (відрізаємо wegas-finance.exe)
+	// exPath := filepath.Dir(ex)
 
-	// 3. Змінюємо робочу директорію на папку з EXE
-	// Це критично для Windows сервісів, які за замовчуванням стартують у System32
-	if err := os.Chdir(exPath); err != nil {
-		log.Fatal(err)
-	}
-	log.Printf("📂 Working directory set to: %s", exPath)
+	// // 3. Змінюємо робочу директорію на папку з EXE
+	// // Це критично для Windows сервісів, які за замовчуванням стартують у System32
+	// if err := os.Chdir(exPath); err != nil {
+	// 	log.Fatal(err)
+	// }
+	// log.Printf("📂 Working directory set to: %s", exPath)
 
-	
+
 ///
 
 
@@ -259,7 +258,7 @@ func startApp() {
 	})
 	
 
-	routes.SetupRoutes(r, appControllers, cfg.UploadsDir, cfg.SecretKey)
+	routes.SetupRoutes(r, appControllers, cfg)
 
 	log.Printf("🚀 Server starting on port %s...", cfg.ServerPort)
 	if err := r.Run(":" + cfg.ServerPort); err != nil {

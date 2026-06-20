@@ -1,12 +1,15 @@
 package services
 
 import (
+	"errors"
+
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/repositories"
 )
 
 type ExportService interface {
 	GetTransactions(user *models.User, filter models.ExportFilterDTO) ([]models.Transaction, error)
+	GetBackup(user *models.User) (*models.BackupDTO, error)
 }
 
 type exportService struct {
@@ -34,4 +37,11 @@ func (s *exportService) GetTransactions(user *models.User, filter models.ExportF
 
 	// 3. Виклик репозиторія
 	return s.repo.GetTransactionsForExport(user.FamilyID, filter)
+}
+
+func (s *exportService) GetBackup(user *models.User) (*models.BackupDTO, error) {
+	if user.RoleID == "child" {
+		return nil, errors.New("access denied: backups are available only for parents or admins")
+	}
+	return s.repo.GetBackupData(user.FamilyID, user.ID, false)
 }
