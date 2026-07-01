@@ -513,7 +513,7 @@ func (s *monobankService) Sync(userID string, targetAccountID string) (int, erro
 
 					normalizedName := utils.NormalizeCounterparty(mTx.Description)
 					mccStr := strconv.Itoa(mTx.Mcc)
-					categoryID := utils.PredictCategoryID(mTx.Description, normalizedName, mccStr, txType, categoryMap)
+					categoryID := utils.PredictCategoryID(mTx.Description, normalizedName, mccStr, "", txType, categoryMap)
 
 					inputs = append(inputs, CreateTransactionInput{
 						AccountID:        mapping.InternalAccountID,
@@ -701,7 +701,7 @@ func (s *monobankService) ProcessWebhook(payload MonoWebhookPayload) error {
 	}
 
 	normalizedName := utils.NormalizeCounterparty(mTx.Description)
-	categoryID := utils.PredictCategoryID(mTx.Description, normalizedName, strconv.Itoa(mTx.Mcc), txType, categoryMap)
+	categoryID := utils.PredictCategoryID(mTx.Description, normalizedName, strconv.Itoa(mTx.Mcc), "", txType, categoryMap)
 
 	input := CreateTransactionInput{
 		AccountID:        mapping.InternalAccountID,

@@ -13,6 +13,7 @@ type ParsedTransaction struct {
 	Type             string
 	RawLine          string
 	MCC              string // 🔥 Додаємо це поле
+	BankCategory     string // 🔥 Додаємо поле для текстової категорії з виписки
 }
 
 type BankStatementParser interface {

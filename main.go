@@ -67,9 +67,7 @@ func main() {
 	// }
 	// log.Printf("📂 Working directory set to: %s", exPath)
 
-
-///
-
+	///
 
 	svcConfig := &service.Config{
 		Name:        "WeGaSFinance",
@@ -114,31 +112,31 @@ func startApp() {
 
 	log.Println("🔄 Running database migrations...")
 	err := db.AutoMigrate(
-		&models.Family{}, 
-		&models.User{}, 
-		&models.Role{}, 
+		&models.Family{},
+		&models.User{},
+		&models.Role{},
 		&models.Account{},
-		&models.Goal{}, 
-		&models.StorageType{}, 
-		&models.Category{}, 
+		&models.Goal{},
+		&models.StorageType{},
+		&models.Category{},
 		&models.Counterparty{},
-		&models.CounterpartyCategory{}, 
-		&models.CounterpartyBalance{}, 
+		&models.CounterpartyCategory{},
+		&models.CounterpartyBalance{},
 		&models.Tag{},
-		&models.ExchangeRate{}, 
-		&models.Transaction{}, 
+		&models.ExchangeRate{},
+		&models.Transaction{},
 		&models.TransactionItem{},
-		&models.TransactionTag{}, 
-		&models.TransactionPhoto{}, 
+		&models.TransactionTag{},
+		&models.TransactionPhoto{},
 		&models.Asset{},
-		&models.AssetPhoto{}, 
+		&models.AssetPhoto{},
 		&models.AssetDocument{},
-		&models.UtilityMeter{}, 
-		&models.UtilityReading{}, 
+		&models.UtilityMeter{},
+		&models.UtilityReading{},
 		&models.BankConnection{},
 		&models.BankAccountMapping{},
 		&models.ShoppingList{}, // <--- ОБОВ'ЯЗКОВО ДОДАЙ ЦЕ
-    &models.ShoppingItem{},
+		&models.ShoppingItem{},
 		&models.WishlistGroup{},
 		&models.WishlistItem{},
 		&models.FamilyJoinCode{},
@@ -224,10 +222,10 @@ func startApp() {
 		StorageType: controllers.NewStorageTypeController(storageTypeService), Currency: controllers.NewCurrencyController(currencyService),
 		Feedback: controllers.NewFeedbackController(feedbackService),
 		Shopping: controllers.NewShoppingController(shoppingService),
-		Wishlist:     controllers.NewWishlistController(wishlistService), // <--- 4. ДОДАНО КОНТРОЛЕР
-		Family:       controllers.NewFamilyController(familyJoinService),
-		WS:           controllers.NewWSController(wsHub),
-		WebAuthn:     controllers.NewWebAuthnController(waService, jwtService, userRepo),
+		Wishlist: controllers.NewWishlistController(wishlistService), // <--- 4. ДОДАНО КОНТРОЛЕР
+		Family:   controllers.NewFamilyController(familyJoinService),
+		WS:       controllers.NewWSController(wsHub),
+		WebAuthn: controllers.NewWebAuthnController(waService, jwtService, userRepo),
 	}
 
 	r := gin.Default()
@@ -256,7 +254,6 @@ func startApp() {
 
 		c.Next()
 	})
-	
 
 	routes.SetupRoutes(r, appControllers, cfg)
 
@@ -282,7 +279,7 @@ func startSchedulers(
 			if now.After(nextRun) {
 				nextRun = nextRun.Add(24 * time.Hour)
 			}
-			
+
 			duration := nextRun.Sub(now)
 			log.Printf("📅 Goals Check scheduled in %v", duration)
 			time.Sleep(duration)
@@ -302,7 +299,7 @@ func startSchedulers(
 		if err := currencyService.SyncRates(); err != nil {
 			log.Printf("❌ Error syncing rates: %v", err)
 		}
-		
+
 		ticker := time.NewTicker(24 * time.Hour)
 		for range ticker.C {
 			log.Println("💱 Scheduled: Updating currency rates...")
@@ -321,14 +318,14 @@ func startSchedulers(
 			if now.After(nextRun) {
 				nextRun = nextRun.Add(24 * time.Hour)
 			}
-			
+
 			duration := nextRun.Sub(now)
 			log.Printf("🤖 Auto-Sync scheduled in %v", duration)
 			time.Sleep(duration)
 
 			log.Println("🤖 Auto-Sync: Waking up! Checking accounts...")
 			var connections []models.BankConnection
-			
+
 			// Знаходимо всі активні підключення
 			if err := db.Where("is_active = ?", true).Find(&connections).Error; err == nil {
 				for _, conn := range connections {

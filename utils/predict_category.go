@@ -15,7 +15,7 @@ var (
 )
 
 // PredictCategoryID аналізує транзакцію і намагається підібрати ID категорії
-func PredictCategoryID(desc string, counterparty string, mcc string, txType string, catMap map[string]string) string {
+func PredictCategoryID(desc string, counterparty string, mcc string, bankCategory string, txType string, catMap map[string]string) string {
 	if len(catMap) == 0 {
 		return ""
 	}
@@ -31,6 +31,15 @@ func PredictCategoryID(desc string, counterparty string, mcc string, txType stri
 			}
 		}
 		return ""
+	}
+
+	// --- 0. ТОЧНИЙ ЗБІГ ЗА БАНКІВСЬКОЮ КАТЕГОРІЄЮ ---
+	if bankCategory != "" {
+		lowerBankCat := strings.ToLower(strings.TrimSpace(bankCategory))
+		exactKey := fmt.Sprintf("%s_%s", txType, lowerBankCat)
+		if id := findCat(exactKey, lowerBankCat); id != "" {
+			return id
+		}
 	}
 
 	// --- 1. ПЕРЕКАЗИ ТА СПЕЦІАЛЬНА ЛОГІКА ---

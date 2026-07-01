@@ -113,7 +113,7 @@ func TestPredictCategoryID(t *testing.T) {
 			if tt.name == "Empty catMap" {
 				cm = nil
 			}
-			id := PredictCategoryID(tt.desc, tt.counterparty, tt.mcc, tt.txType, cm)
+			id := PredictCategoryID(tt.desc, tt.counterparty, tt.mcc, "", tt.txType, cm)
 			assert.Equal(t, tt.expectedID, id)
 		})
 	}

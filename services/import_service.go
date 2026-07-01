@@ -111,7 +111,7 @@ func (s *importService) ProcessFile(file *multipart.FileHeader, accountID string
 		}
 
 		// 🔥 3. Викликаємо винесену функцію з пакету utils, передаючи чистий finalName
-		predictedCatID := utils.PredictCategoryID(pt.Description, finalName, pt.MCC, pt.Type, categoryMap)
+		predictedCatID := utils.PredictCategoryID(pt.Description, finalName, pt.MCC, pt.BankCategory, pt.Type, categoryMap)
 
 		result.Transactions = append(result.Transactions, PreviewTransaction{
 			Date:                 pt.Date.UnixMilli(),
