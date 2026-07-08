@@ -3,24 +3,38 @@ package controllers
 import (
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/VladHrytsaiuk/wegas-finance/backend/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true // У реальному проекті обмежте Origin
-	},
-}
-
 type WSController struct {
-	Hub *utils.WSHub
+	Hub      *utils.WSHub
+	upgrader websocket.Upgrader
 }
 
-func NewWSController(hub *utils.WSHub) *WSController {
-	return &WSController{Hub: hub}
+func NewWSController(hub *utils.WSHub, allowedOrigins []string) *WSController {
+	originSet := make(map[string]struct{}, len(allowedOrigins))
+	for _, origin := range allowedOrigins {
+		originSet[origin] = struct{}{}
+	}
+
+	return &WSController{
+		Hub: hub,
+		upgrader: websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool {
+				origin := strings.TrimSpace(r.Header.Get("Origin"))
+				if origin == "" {
+					return true
+				}
+
+				_, allowed := originSet[origin]
+				return allowed
+			},
+		},
+	}
 }
 
 func (ctrl *WSController) HandleWS(c *gin.Context) {
@@ -30,7 +44,7 @@ func (ctrl *WSController) HandleWS(c *gin.Context) {
 		return
 	}
 
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := ctrl.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("❌ Failed to upgrade to websocket: %v", err)
 		return

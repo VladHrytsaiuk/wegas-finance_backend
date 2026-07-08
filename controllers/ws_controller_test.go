@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -16,7 +17,7 @@ func TestWSController(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	hub := utils.NewWSHub()
 	go hub.Run()
-	controller := NewWSController(hub)
+	controller := NewWSController(hub, []string{"http://127.0.0.1"})
 
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
@@ -31,7 +32,10 @@ func TestWSController(t *testing.T) {
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
 
 	t.Run("Connect to WS", func(t *testing.T) {
-		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+		headers := http.Header{}
+		headers.Set("Origin", "http://127.0.0.1")
+
+		conn, _, err := websocket.DefaultDialer.Dial(wsURL, headers)
 		assert.NoError(t, err)
 		defer conn.Close()
 

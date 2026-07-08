@@ -46,6 +46,9 @@ backend/
     ```bash
     cp .env.example .env
     ```
+    `JWT_SECRET` і `REGISTRATION_CODE` є обов'язковими. Без них бекенд не стартує.
+    Для локального запуску на macOS/Linux використовуйте відносні шляхи на кшталт `DB_PATH=finance.db` і `UPLOADS_DIR=./uploads`.
+    Для крос-доменного доступу вкажіть `CORS_ALLOWED_ORIGINS` як список origin-ів через кому, наприклад `https://wegas-finance.vercel.app,http://192.168.0.10:5173`.
 2.  **Завантаження залежностей**:
     ```bash
     go mod download
