@@ -61,9 +61,7 @@ func (h *AuthController) Register(c *gin.Context) {
 		return
 	}
 
-	// Set Refresh Token as HttpOnly cookie
-	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie("refresh_token", res.RefreshToken, 30*24*3600, "/", "", true, true)
+	setRefreshTokenCookie(c, res.RefreshToken)
 
 	c.JSON(http.StatusCreated, res)
 }
@@ -96,9 +94,7 @@ func (h *AuthController) Login(c *gin.Context) {
 		return
 	}
 
-	// Set Refresh Token as HttpOnly cookie
-	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie("refresh_token", res.RefreshToken, 30*24*3600, "/", "", true, true)
+	setRefreshTokenCookie(c, res.RefreshToken)
 
 	c.JSON(http.StatusOK, res)
 }
@@ -139,9 +135,7 @@ func (h *AuthController) LoginWithPIN(c *gin.Context) {
 		return
 	}
 
-	// Set Refresh Token as HttpOnly cookie
-	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie("refresh_token", res.RefreshToken, 30*24*3600, "/", "", true, true)
+	setRefreshTokenCookie(c, res.RefreshToken)
 
 	c.JSON(http.StatusOK, res)
 }
