@@ -136,9 +136,7 @@ func (ctrl *WebAuthnController) LoginVerify(c *gin.Context) {
 		return
 	}
 
-	// Set Refresh Token as HttpOnly cookie
-	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie("refresh_token", refreshToken, 30*24*3600, "/", "", true, true)
+	setRefreshTokenCookie(c, refreshToken)
 
 	c.JSON(http.StatusOK, gin.H{
 		"access_token": accessToken,
