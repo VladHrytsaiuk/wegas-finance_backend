@@ -26,6 +26,7 @@ func TestAccountController(t *testing.T) {
 	r.GET("/accounts", controller.GetAll)
 	r.GET("/accounts/:id", controller.GetOne)
 	r.PUT("/accounts/:id", controller.Update)
+	r.PUT("/accounts/mobile-order", controller.UpdateMobileOrder)
 	r.DELETE("/accounts/:id", controller.Delete)
 
 	t.Run("Create Account", func(t *testing.T) {
@@ -91,6 +92,17 @@ func TestAccountController(t *testing.T) {
 		mockService.On("Delete", "acc-1", mock.Anything).Return(nil).Once()
 
 		w := PerformRequest(r, "DELETE", "/accounts/acc-1", nil)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		mockService.AssertExpectations(t)
+	})
+
+	t.Run("Update Mobile Order", func(t *testing.T) {
+		mockService.On("UpdateMobileOrder", []string{"acc-2", "acc-1"}, mock.Anything).Return(nil).Once()
+
+		w := PerformRequest(r, "PUT", "/accounts/mobile-order", gin.H{
+			"account_ids": []string{"acc-2", "acc-1"},
+		})
 
 		assert.Equal(t, http.StatusOK, w.Code)
 		mockService.AssertExpectations(t)

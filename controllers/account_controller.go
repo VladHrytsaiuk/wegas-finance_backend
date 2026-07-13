@@ -19,19 +19,22 @@ func NewAccountController(service services.AccountService) *AccountController {
 // --- HANDLERS ---
 
 type AccountInputJSON struct {
-	Name           string `json:"name" binding:"required"`
-	Type           string `json:"type" binding:"required"`
-	Currency       string `json:"currency" binding:"required"`
-	InitialBalance int64  `json:"initial_balance"`
-	Color          string `json:"color"`
-	CardNumber     string `json:"card_number"`
-	PaymentSystem  string `json:"payment_system"`
-	BankName       string `json:"bank_name"` 
-	CardType       string `json:"card_type"` // Ви просили CardType
-	OwnerID        string `json:"user_id"`
-	StorageTypeID *string `json:"storage_type_id"`
-	GoalID        *string `json:"goal_id"`
+	Name           string  `json:"name" binding:"required"`
+	Type           string  `json:"type" binding:"required"`
+	Currency       string  `json:"currency" binding:"required"`
+	InitialBalance int64   `json:"initial_balance"`
+	Color          string  `json:"color"`
+	CardNumber     string  `json:"card_number"`
+	PaymentSystem  string  `json:"payment_system"`
+	BankName       string  `json:"bank_name"`
+	CardType       string  `json:"card_type"` // Ви просили CardType
+	OwnerID        string  `json:"user_id"`
+	StorageTypeID  *string `json:"storage_type_id"`
+	GoalID         *string `json:"goal_id"`
+}
 
+type UpdateMobileAccountOrderJSON struct {
+	AccountIDs []string `json:"account_ids" binding:"required"`
 }
 
 // Create godoc
@@ -73,8 +76,8 @@ func (h *AccountController) Create(c *gin.Context) {
 		CardNumber:     jsonInput.CardNumber,
 		PaymentSystem:  jsonInput.PaymentSystem,
 		OwnerID:        jsonInput.OwnerID,
-		StorageTypeID: jsonInput.StorageTypeID,
-		GoalID:        jsonInput.GoalID,
+		StorageTypeID:  jsonInput.StorageTypeID,
+		GoalID:         jsonInput.GoalID,
 	}
 
 	// Передаємо юзера в сервіс
@@ -186,8 +189,8 @@ func (h *AccountController) Update(c *gin.Context) {
 		CardNumber:     jsonInput.CardNumber,
 		PaymentSystem:  jsonInput.PaymentSystem,
 		OwnerID:        jsonInput.OwnerID,
-		StorageTypeID: jsonInput.StorageTypeID,
-		GoalID:        jsonInput.GoalID,
+		StorageTypeID:  jsonInput.StorageTypeID,
+		GoalID:         jsonInput.GoalID,
 	}
 
 	account, err := h.service.Update(id, serviceInput, user)
@@ -226,4 +229,39 @@ func (h *AccountController) Delete(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Account deleted"})
+}
+
+// UpdateMobileOrder godoc
+// @Summary Update mobile accounts order
+// @Description Saves the current user's custom mobile account order.
+// @Tags Accounts
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param body body UpdateMobileAccountOrderJSON true "Ordered account ids"
+// @Success 200 {object} map[string]string "Order saved"
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /accounts/mobile-order [put]
+func (h *AccountController) UpdateMobileOrder(c *gin.Context) {
+	currentUser, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	user := currentUser.(*models.User)
+
+	var jsonInput UpdateMobileAccountOrderJSON
+	if err := c.ShouldBindJSON(&jsonInput); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.service.UpdateMobileOrder(jsonInput.AccountIDs, user); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "saved"})
 }

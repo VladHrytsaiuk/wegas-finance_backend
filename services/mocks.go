@@ -49,6 +49,11 @@ func (m *MockAccountService) Delete(id string, user *models.User) error {
 	return args.Error(0)
 }
 
+func (m *MockAccountService) UpdateMobileOrder(accountIDs []string, user *models.User) error {
+	args := m.Called(accountIDs, user)
+	return args.Error(0)
+}
+
 // MockAssetRepository
 type MockAssetRepository struct {
 	mock.Mock

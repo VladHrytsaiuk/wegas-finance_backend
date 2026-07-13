@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -31,6 +32,7 @@ type AccountService interface {
 	GetByID(id string, user *models.User) (*models.Account, error)
 	Update(id string, input CreateAccountInput, user *models.User) (*models.Account, error)
 	Delete(id string, user *models.User) error
+	UpdateMobileOrder(accountIDs []string, user *models.User) error
 }
 
 type accountService struct {
@@ -211,4 +213,36 @@ func (s *accountService) Delete(id string, user *models.User) error {
 			Where("id = ?", id).
 			Update("deleted_at", time.Now().UnixMilli()).Error
 	})
+}
+
+func (s *accountService) UpdateMobileOrder(accountIDs []string, user *models.User) error {
+	accessibleAccounts, err := s.GetAll(user)
+	if err != nil {
+		return err
+	}
+
+	accessibleIDs := make(map[string]struct{}, len(accessibleAccounts))
+	for _, account := range accessibleAccounts {
+		accessibleIDs[account.ID] = struct{}{}
+	}
+
+	seen := make(map[string]struct{}, len(accountIDs))
+	for _, accountID := range accountIDs {
+		if _, ok := accessibleIDs[accountID]; !ok {
+			return errors.New("account is not accessible")
+		}
+		if _, duplicate := seen[accountID]; duplicate {
+			return errors.New("duplicate account id in order payload")
+		}
+		seen[accountID] = struct{}{}
+	}
+
+	payload, err := json.Marshal(accountIDs)
+	if err != nil {
+		return err
+	}
+
+	return s.db.Model(&models.User{}).
+		Where("id = ? AND deleted_at IS NULL", user.ID).
+		Update("mobile_accounts_order", string(payload)).Error
 }

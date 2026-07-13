@@ -25,28 +25,28 @@ type AppControllers struct {
 	Role         *controllers.RoleController
 	Settings     *controllers.SettingsController
 	Export       *controllers.ExportController
-	Import       *controllers.ImportController     // <--- Added
-	Monobank     *controllers.MonobankController   // <--- Added
+	Import       *controllers.ImportController   // <--- Added
+	Monobank     *controllers.MonobankController // <--- Added
 	Asset        *controllers.AssetController
 	// Medical      *controllers.MedicalController
-	Utility      *controllers.UtilityController
-	Goal         *controllers.GoalController        // <--- ДОДАЛИ
-  StorageType  *controllers.StorageTypeController // <--- ДОДАЛИ
-	Currency 	   *controllers.CurrencyController
-	Feedback     *controllers.FeedbackController
-	Shopping     *controllers.ShoppingController
-	Wishlist     *controllers.WishlistController
-	Family       *controllers.FamilyController
-	WS           *controllers.WSController
-	WebAuthn     *controllers.WebAuthnController
+	Utility     *controllers.UtilityController
+	Goal        *controllers.GoalController        // <--- ДОДАЛИ
+	StorageType *controllers.StorageTypeController // <--- ДОДАЛИ
+	Currency    *controllers.CurrencyController
+	Feedback    *controllers.FeedbackController
+	Shopping    *controllers.ShoppingController
+	Wishlist    *controllers.WishlistController
+	Family      *controllers.FamilyController
+	WS          *controllers.WSController
+	WebAuthn    *controllers.WebAuthnController
 }
 
 func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 
 	_ = os.MkdirAll(cfg.UploadsDir, 0755)
 
-  r.StaticFS("/uploads", gin.Dir(cfg.UploadsDir, true))
-	
+	r.StaticFS("/uploads", gin.Dir(cfg.UploadsDir, true))
+
 	// Swagger UI
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
@@ -115,6 +115,7 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 			// --- ACCOUNTS ---
 			protected.POST("/accounts", c.Account.Create)
 			protected.GET("/accounts", c.Account.GetAll)
+			protected.PUT("/accounts/mobile-order", c.Account.UpdateMobileOrder)
 			protected.GET("/accounts/:id", c.Account.GetOne)
 			protected.PUT("/accounts/:id", c.Account.Update)
 			protected.DELETE("/accounts/:id", c.Account.Delete)
@@ -135,7 +136,7 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 			protected.POST("/transactions/batch", c.Transaction.BatchCreate)
 			protected.DELETE("/transactions/photos/:id", c.Transaction.DeletePhoto)
 			protected.GET("/transactions/predict", c.Transaction.PredictCategory)
-			
+
 			// Receipts
 			protected.POST("/transactions/:id/receipt", c.Transaction.UploadReceipt)
 			protected.DELETE("/transactions/:id/receipt", c.Transaction.DeleteReceipt)
@@ -143,16 +144,15 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 			// --- MONOBANK (Виправлено конфлікт шляхів) ---
 			protected.POST("/monobank/connect", c.Monobank.Connect)
 			protected.POST("/monobank/settings", c.Monobank.SaveSettings) // Зберегти налаштування
-      protected.GET("/monobank/settings", c.Monobank.GetSettings) 
-      
-      // 2. Refresh (API Request) - викликається по кнопці "Налаштувати"
-      protected.POST("/monobank/refresh", c.Monobank.RefreshClientInfo)
+			protected.GET("/monobank/settings", c.Monobank.GetSettings)
+
+			// 2. Refresh (API Request) - викликається по кнопці "Налаштувати"
+			protected.POST("/monobank/refresh", c.Monobank.RefreshClientInfo)
 			protected.POST("/monobank/sync-confirm", c.Monobank.ConfirmSync)
 			protected.POST("/monobank/disconnect", c.Monobank.Disconnect)
 			protected.GET("/monobank/status", c.Monobank.GetStatus) // <--- Додай
 			protected.POST("/monobank/sync", c.Monobank.ForceSync)
 			protected.POST("/monobank/force-resync", c.Monobank.ForceResyncCounterparties)
-
 
 			// --- COUNTERPARTIES ---
 			protected.POST("/counterparties", c.Counterparty.Create)
@@ -177,7 +177,7 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 			protected.DELETE("/roles/:id", c.Role.Delete)
 
 			// --- GENERAL SETTINGS ---
-			protected.GET("/settings", c.Settings.GetSettingsHTTP)   // Загальні налаштування
+			protected.GET("/settings", c.Settings.GetSettingsHTTP) // Загальні налаштування
 			protected.POST("/settings", c.Settings.SaveSettingsHTTP)
 
 			// --- ASSETS ---
@@ -190,7 +190,7 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 			protected.PATCH("/assets/:id/mileage", c.Asset.UpdateMileage)
 			protected.DELETE("/assets/:id/photo", c.Asset.RemovePhoto)
 			protected.POST("/assets/:id/documents", c.Asset.UploadDocument)
-      protected.DELETE("/assets/:id/documents/:doc_id", c.Asset.RemoveDocument)
+			protected.DELETE("/assets/:id/documents/:doc_id", c.Asset.RemoveDocument)
 
 			// --- UTILITY ---
 			protected.GET("/utility/meters", c.Utility.GetMeters)
@@ -208,44 +208,41 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 
 			protected.GET("/utility/stats/global", c.Utility.GetGlobalStats)
 			protected.GET("/utility/stats/meter/:id", c.Utility.GetMeterStats)
-			
-
 
 			// --- GOALS (Фінансові цілі) ---
-      protected.POST("/goals", c.Goal.Create)
-      protected.GET("/goals", c.Goal.GetAll)
-      protected.GET("/goals/:id", c.Goal.GetOne)
-      protected.PUT("/goals/:id", c.Goal.Update)
-      protected.DELETE("/goals/:id", c.Goal.Delete)
+			protected.POST("/goals", c.Goal.Create)
+			protected.GET("/goals", c.Goal.GetAll)
+			protected.GET("/goals/:id", c.Goal.GetOne)
+			protected.PUT("/goals/:id", c.Goal.Update)
+			protected.DELETE("/goals/:id", c.Goal.Delete)
 			protected.POST("/goals/:id/photo", c.Goal.UploadPhoto)
-      
-      // Спеціальний роут для відв'язування рахунку від цілі (або це можна робити через PUT goals)
-      protected.POST("/goals/:id/link-account", c.Goal.LinkAccount)
-      protected.POST("/goals/:id/unlink-account", c.Goal.UnlinkAccount)
 
-      // --- STORAGE TYPES (Типи скарбничок) ---
-      protected.GET("/storage-types", c.StorageType.GetAll) // Отримати і системні, і свої
-      protected.POST("/storage-types", c.StorageType.Create)
-      protected.DELETE("/storage-types/:id", c.StorageType.Delete)
+			// Спеціальний роут для відв'язування рахунку від цілі (або це можна робити через PUT goals)
+			protected.POST("/goals/:id/link-account", c.Goal.LinkAccount)
+			protected.POST("/goals/:id/unlink-account", c.Goal.UnlinkAccount)
+
+			// --- STORAGE TYPES (Типи скарбничок) ---
+			protected.GET("/storage-types", c.StorageType.GetAll) // Отримати і системні, і свої
+			protected.POST("/storage-types", c.StorageType.Create)
+			protected.DELETE("/storage-types/:id", c.StorageType.Delete)
 
 			// --- СПИСКИ (НОТАТКИ) ---
-      protected.GET("/shopping-lists", c.Shopping.GetLists)
-      protected.POST("/shopping-lists", c.Shopping.CreateList)
-      protected.PUT("/shopping-lists/:id", c.Shopping.UpdateList)
-      protected.DELETE("/shopping-lists/:id", c.Shopping.DeleteList)
+			protected.GET("/shopping-lists", c.Shopping.GetLists)
+			protected.POST("/shopping-lists", c.Shopping.CreateList)
+			protected.PUT("/shopping-lists/:id", c.Shopping.UpdateList)
+			protected.DELETE("/shopping-lists/:id", c.Shopping.DeleteList)
 
-      // --- ЕЛЕМЕНТИ ВСЕРЕДИНІ НОТАТКИ ---
-      protected.POST("/shopping-lists/:id/items", c.Shopping.AddItem)
-      protected.PUT("/shopping-items/:id", c.Shopping.UpdateItem)
-      protected.DELETE("/shopping-items/:id", c.Shopping.DeleteItem)
-      protected.DELETE("/shopping-lists/:id/completed", c.Shopping.ClearCompletedInList)
+			// --- ЕЛЕМЕНТИ ВСЕРЕДИНІ НОТАТКИ ---
+			protected.POST("/shopping-lists/:id/items", c.Shopping.AddItem)
+			protected.PUT("/shopping-items/:id", c.Shopping.UpdateItem)
+			protected.DELETE("/shopping-items/:id", c.Shopping.DeleteItem)
+			protected.DELETE("/shopping-lists/:id/completed", c.Shopping.ClearCompletedInList)
 
 			// --- WISHLIST ---
 			protected.GET("/wishlist-groups", c.Wishlist.GetGroups)
 			protected.POST("/wishlist-groups", c.Wishlist.CreateGroup)
 			protected.PUT("/wishlist-groups/:id", c.Wishlist.UpdateGroup)
 			protected.DELETE("/wishlist-groups/:id", c.Wishlist.DeleteGroup)
-			
 
 			protected.GET("/wishlist", c.Wishlist.GetAll)
 			protected.POST("/wishlist", c.Wishlist.Create)
