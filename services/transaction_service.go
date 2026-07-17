@@ -53,8 +53,10 @@ type TransactionService interface {
 	Create(input CreateTransactionInput, files []*multipart.FileHeader, user *models.User) (string, error)
 	GetAll(filter repositories.TransactionFilter, user *models.User) ([]models.Transaction, int64, error)
 	GetByID(id string, user *models.User) (*models.Transaction, error)
+	GetLinkedReceipts(id string, user *models.User) ([]models.ReceiptSource, error)
 	Delete(id string, user *models.User) error
 	Update(id string, input CreateTransactionInput, user *models.User) error
+	UnlinkReceiptSource(txID string, receiptSourceID string, user *models.User) error
 
 	UploadReceipt(txID string, file multipart.File, header *multipart.FileHeader, user *models.User) (string, error)
 	DeleteReceipt(txID string, user *models.User) error
@@ -360,6 +362,26 @@ func (s *txService) GetByID(id string, user *models.User) (*models.Transaction, 
 	return tx, nil
 }
 
+func (s *txService) GetLinkedReceipts(id string, user *models.User) ([]models.ReceiptSource, error) {
+	tx, err := s.repo.GetByID(id, user.FamilyID)
+	if err != nil {
+		return nil, errors.New("transaction not found")
+	}
+	if user.RoleID == "child" && tx.UserID != user.ID {
+		return nil, errors.New("access denied")
+	}
+
+	var sources []models.ReceiptSource
+	err = s.db.
+		Preload("Items").
+		Preload("Counterparty").
+		Preload("Category").
+		Where("linked_transaction_id = ? AND family_id = ? AND deleted_at IS NULL", id, user.FamilyID).
+		Order("created_at desc").
+		Find(&sources).Error
+	return sources, err
+}
+
 func (s *txService) UploadReceipt(txID string, file multipart.File, header *multipart.FileHeader, user *models.User) (string, error) {
 	tx, err := s.repo.GetByID(txID, user.FamilyID)
 	if err != nil {
@@ -413,6 +435,63 @@ func (s *txService) DeletePhoto(photoID string, user *models.User) error {
 		_ = s.storage.DeleteFile(photo.Path)
 	}
 	return s.repo.DeletePhotoByID(photoID)
+}
+
+func (s *txService) UnlinkReceiptSource(txID string, receiptSourceID string, user *models.User) error {
+	txModel, err := s.repo.GetByID(txID, user.FamilyID)
+	if err != nil {
+		return errors.New("transaction not found")
+	}
+	if user.RoleID == "child" && txModel.UserID != user.ID {
+		return errors.New("access denied")
+	}
+
+	var source models.ReceiptSource
+	err = s.db.Where("id = ? AND linked_transaction_id = ? AND family_id = ? AND deleted_at IS NULL", receiptSourceID, txID, user.FamilyID).First(&source).Error
+	if err != nil {
+		return errors.New("linked receipt not found")
+	}
+
+	now := s.clock.NowUnixMilli()
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("transaction_id = ?", txID).Delete(&models.TransactionItem{}).Error; err != nil {
+			return err
+		}
+
+		if source.FilePath != "" {
+			if err := tx.Where("transaction_id = ? AND path = ?", txID, source.FilePath).Delete(&models.TransactionPhoto{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&models.Transaction{}).
+				Where("id = ? AND receipt_img = ?", txID, source.FilePath).
+				Update("receipt_img", "").Error; err != nil {
+				return err
+			}
+		}
+
+		if err := tx.Model(&models.ReceiptSource{}).Where("id = ?", source.ID).Updates(map[string]interface{}{
+			"linked_transaction_id": nil,
+			"linked_at":             nil,
+		}).Error; err != nil {
+			return err
+		}
+
+		var entry models.InboxEntry
+		entryErr := tx.Where("receipt_source_id = ? AND family_id = ? AND deleted_at IS NULL", source.ID, user.FamilyID).First(&entry).Error
+		if entryErr == nil {
+			entry.MatchedTransactionID = nil
+			entry.Status = models.InboxEntryStatusUnlinked
+			entry.Reason = "unlinked_by_user"
+			entry.UpdatedAt = now
+			if err := tx.Save(&entry).Error; err != nil {
+				return err
+			}
+		} else if !errors.Is(entryErr, gorm.ErrRecordNotFound) {
+			return entryErr
+		}
+
+		return nil
+	})
 }
 
 func (s *txService) BatchCreate(inputs []CreateTransactionInput, user *models.User) (int, error) {

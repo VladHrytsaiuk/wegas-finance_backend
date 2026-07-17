@@ -128,6 +128,9 @@ func startApp() {
 		&models.TransactionItem{},
 		&models.TransactionTag{},
 		&models.TransactionPhoto{},
+		&models.ReceiptSource{},
+		&models.ReceiptSourceItem{},
+		&models.InboxEntry{},
 		&models.Asset{},
 		&models.AssetPhoto{},
 		&models.AssetDocument{},
@@ -158,6 +161,7 @@ func startApp() {
 	userRepo := repositories.NewUserRepository(db)
 	waRepo := repositories.NewWebAuthnRepository(db)
 	accountRepo := repositories.NewAccountRepository(db)
+	inboxRepo := repositories.NewInboxRepository(db)
 	categoryRepo := repositories.NewCategoryRepository(db)
 	cpRepo := repositories.NewCounterpartyRepository(db)
 	tagRepo := repositories.NewTagRepository(db)
@@ -188,6 +192,7 @@ func startApp() {
 	userService := services.NewUserService(userRepo, wsHub, db)
 	authService := services.NewAuthService(userRepo, waRepo, jwtService, cfg.SecretKey, cfg.RegistrationCode)
 	accountService := services.NewAccountService(accountRepo, db)
+	inboxService := services.NewInboxService(inboxRepo, db)
 	tagService := services.NewTagService(tagRepo)
 	txService := services.NewTransactionService(db, txRepo, cpRepo, assetRepo, storageService, clock)
 	exportService := services.NewExportService(exportRepo)
@@ -213,6 +218,7 @@ func startApp() {
 	appControllers := routes.AppControllers{
 		Auth: controllers.NewAuthController(authService), User: controllers.NewUserController(userService),
 		Account: controllers.NewAccountController(accountService), Category: controllers.NewCategoryController(categoryService),
+		Inbox: controllers.NewInboxController(inboxService),
 		Counterparty: controllers.NewCounterpartyController(cpService), Tag: controllers.NewTagController(tagService),
 		Transaction: controllers.NewTransactionController(txService), Dashboard: controllers.NewDashboardController(statsService, userRepo),
 		Role: controllers.NewRoleController(roleService), Export: controllers.NewExportController(exportService),

@@ -390,6 +390,11 @@ func (m *MockTransactionService) GetByID(id string, user *models.User) (*models.
 	return args.Get(0).(*models.Transaction), args.Error(1)
 }
 
+func (m *MockTransactionService) GetLinkedReceipts(id string, user *models.User) ([]models.ReceiptSource, error) {
+	args := m.Called(id, user)
+	return args.Get(0).([]models.ReceiptSource), args.Error(1)
+}
+
 func (m *MockTransactionService) Update(id string, input CreateTransactionInput, user *models.User) error {
 	args := m.Called(id, input, user)
 	return args.Error(0)
@@ -397,6 +402,11 @@ func (m *MockTransactionService) Update(id string, input CreateTransactionInput,
 
 func (m *MockTransactionService) Delete(id string, user *models.User) error {
 	args := m.Called(id, user)
+	return args.Error(0)
+}
+
+func (m *MockTransactionService) UnlinkReceiptSource(txID string, receiptSourceID string, user *models.User) error {
+	args := m.Called(txID, receiptSourceID, user)
 	return args.Error(0)
 }
 
@@ -423,6 +433,56 @@ func (m *MockTransactionService) BatchCreate(inputs []CreateTransactionInput, us
 func (m *MockTransactionService) PredictCategory(itemName string, user *models.User) (string, error) {
 	args := m.Called(itemName, user)
 	return args.String(0), args.Error(1)
+}
+
+// MockInboxService
+type MockInboxService struct {
+	mock.Mock
+}
+
+func (m *MockInboxService) Create(input InboxCreateInput, user *models.User) (*models.InboxEntry, error) {
+	args := m.Called(input, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.InboxEntry), args.Error(1)
+}
+
+func (m *MockInboxService) GetAll(filter InboxListFilter, user *models.User) ([]models.InboxEntry, int64, error) {
+	args := m.Called(filter, user)
+	return args.Get(0).([]models.InboxEntry), args.Get(1).(int64), args.Error(2)
+}
+
+func (m *MockInboxService) GetByID(id string, user *models.User) (*models.InboxEntry, error) {
+	args := m.Called(id, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.InboxEntry), args.Error(1)
+}
+
+func (m *MockInboxService) SelectAccount(id string, accountID string, user *models.User) (*models.InboxEntry, error) {
+	args := m.Called(id, accountID, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.InboxEntry), args.Error(1)
+}
+
+func (m *MockInboxService) Link(id string, transactionID string, applyItems bool, user *models.User) (*models.InboxEntry, error) {
+	args := m.Called(id, transactionID, applyItems, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.InboxEntry), args.Error(1)
+}
+
+func (m *MockInboxService) Unlink(id string, user *models.User) (*models.InboxEntry, error) {
+	args := m.Called(id, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.InboxEntry), args.Error(1)
 }
 
 // MockGoalService

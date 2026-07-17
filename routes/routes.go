@@ -21,6 +21,7 @@ type AppControllers struct {
 	Counterparty *controllers.CounterpartyController
 	Tag          *controllers.TagController
 	Transaction  *controllers.TransactionController
+	Inbox        *controllers.InboxController
 	Dashboard    *controllers.DashboardController
 	Role         *controllers.RoleController
 	Settings     *controllers.SettingsController
@@ -136,10 +137,20 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 			protected.POST("/transactions/batch", c.Transaction.BatchCreate)
 			protected.DELETE("/transactions/photos/:id", c.Transaction.DeletePhoto)
 			protected.GET("/transactions/predict", c.Transaction.PredictCategory)
+			protected.GET("/transactions/:id/receipt-sources", c.Transaction.GetLinkedReceipts)
+			protected.POST("/transactions/:id/receipt-sources/unlink", c.Transaction.UnlinkReceiptSource)
 
 			// Receipts
 			protected.POST("/transactions/:id/receipt", c.Transaction.UploadReceipt)
 			protected.DELETE("/transactions/:id/receipt", c.Transaction.DeleteReceipt)
+
+			// --- INBOX ---
+			protected.POST("/inbox", c.Inbox.Create)
+			protected.GET("/inbox", c.Inbox.GetAll)
+			protected.GET("/inbox/:id", c.Inbox.GetOne)
+			protected.PATCH("/inbox/:id/account", c.Inbox.SelectAccount)
+			protected.POST("/inbox/:id/link", c.Inbox.Link)
+			protected.POST("/inbox/:id/unlink", c.Inbox.Unlink)
 
 			// --- MONOBANK (Виправлено конфлікт шляхів) ---
 			protected.POST("/monobank/connect", c.Monobank.Connect)

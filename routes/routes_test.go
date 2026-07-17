@@ -20,6 +20,7 @@ func TestSetupRoutes(t *testing.T) {
 		Auth:         &controllers.AuthController{},
 		User:         &controllers.UserController{},
 		Account:      &controllers.AccountController{},
+		Inbox:        &controllers.InboxController{},
 		Category:     &controllers.CategoryController{},
 		Counterparty: &controllers.CounterpartyController{},
 		Tag:          &controllers.TagController{},
@@ -69,6 +70,8 @@ func TestSetupRoutes(t *testing.T) {
 
 	// Protected routes (prefix /api/)
 	assert.True(t, findRoute("GET", "/api/accounts"))
+	assert.True(t, findRoute("GET", "/api/inbox"))
+	assert.True(t, findRoute("POST", "/api/inbox"))
 	assert.True(t, findRoute("GET", "/api/transactions"))
 	assert.True(t, findRoute("POST", "/api/transactions"))
 	assert.True(t, findRoute("GET", "/api/dashboard/stats"))

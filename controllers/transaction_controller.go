@@ -16,6 +16,10 @@ import (
 type TransactionController struct {
 	service services.TransactionService
 }
+
+type UnlinkReceiptSourceJSON struct {
+	ReceiptSourceID string `json:"receipt_source_id" binding:"required"`
+}
 type CreateTxJSON struct {
   AccountID       string `json:"account_id" binding:"required"`
   TargetAccountID string `json:"target_account_id"`
@@ -200,6 +204,73 @@ func (h *TransactionController) UploadReceipt(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"path": path})
+}
+
+// GetLinkedReceipts godoc
+// @Summary Get linked receipts for a transaction
+// @Description Returns receipt sources linked to the given transaction.
+// @Tags Transactions
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Transaction ID"
+// @Success 200 {array} models.ReceiptSource
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 404 {object} map[string]string "Transaction not found"
+// @Router /transactions/{id}/receipt-sources [get]
+func (h *TransactionController) GetLinkedReceipts(c *gin.Context) {
+	id := c.Param("id")
+	currentUser, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	user := currentUser.(*models.User)
+
+	sources, err := h.service.GetLinkedReceipts(id, user)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, sources)
+}
+
+// UnlinkReceiptSource godoc
+// @Summary Unlink receipt source from a transaction
+// @Description Removes receipt-source enrichment from the transaction and returns the source back to inbox flow.
+// @Tags Transactions
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Transaction ID"
+// @Param body body UnlinkReceiptSourceJSON true "Unlink payload"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string "Invalid input"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 404 {object} map[string]string "Transaction or receipt link not found"
+// @Router /transactions/{id}/receipt-sources/unlink [post]
+func (h *TransactionController) UnlinkReceiptSource(c *gin.Context) {
+	id := c.Param("id")
+	currentUser, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	user := currentUser.(*models.User)
+
+	var input UnlinkReceiptSourceJSON
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.service.UnlinkReceiptSource(id, input.ReceiptSourceID, user); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
 }
 
 // GetAll godoc
@@ -578,6 +649,5 @@ func (h *TransactionController) PredictCategory(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"category_id": categoryID})
 	}
 }
-
 
 
