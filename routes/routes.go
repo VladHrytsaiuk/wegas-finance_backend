@@ -14,25 +14,25 @@ import (
 
 // AppControllers — контейнер для всіх контролерів
 type AppControllers struct {
-	Auth         *controllers.AuthController
-	User         *controllers.UserController
-	Account      *controllers.AccountController
-	Category     *controllers.CategoryController
-	Counterparty *controllers.CounterpartyController
-	Tag          *controllers.TagController
-	Transaction  *controllers.TransactionController
-	Inbox        *controllers.InboxController
-	Dashboard    *controllers.DashboardController
-	Role         *controllers.RoleController
-	Settings     *controllers.SettingsController
-	Export       *controllers.ExportController
-	Import       *controllers.ImportController   // <--- Added
+	Auth             *controllers.AuthController
+	User             *controllers.UserController
+	Account          *controllers.AccountController
+	Category         *controllers.CategoryController
+	Counterparty     *controllers.CounterpartyController
+	Tag              *controllers.TagController
+	Transaction      *controllers.TransactionController
+	Inbox            *controllers.InboxController
+	Dashboard        *controllers.DashboardController
+	Role             *controllers.RoleController
+	Settings         *controllers.SettingsController
+	Export           *controllers.ExportController
+	Import           *controllers.ImportController // <--- Added
 	ReceiptIngestion *controllers.ReceiptIngestionController
-	TelegramLink *controllers.TelegramLinkController
-	TelegramBot  *controllers.TelegramBotController
-	TelegramWebhook *controllers.TelegramWebhookController
-	Monobank     *controllers.MonobankController // <--- Added
-	Asset        *controllers.AssetController
+	TelegramLink     *controllers.TelegramLinkController
+	TelegramBot      *controllers.TelegramBotController
+	TelegramWebhook  *controllers.TelegramWebhookController
+	Monobank         *controllers.MonobankController // <--- Added
+	Asset            *controllers.AssetController
 	// Medical      *controllers.MedicalController
 	Utility     *controllers.UtilityController
 	Goal        *controllers.GoalController        // <--- ДОДАЛИ
@@ -161,6 +161,8 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 			// --- INBOX ---
 			protected.POST("/inbox", c.Inbox.Create)
 			protected.GET("/inbox", c.Inbox.GetAll)
+			protected.GET("/inbox/:id/account-candidates", c.Inbox.GetAccountCandidates)
+			protected.GET("/inbox/:id/transaction-candidates", c.Inbox.GetTransactionCandidates)
 			protected.GET("/inbox/:id", c.Inbox.GetOne)
 			protected.PATCH("/inbox/:id/account", c.Inbox.SelectAccount)
 			protected.POST("/inbox/:id/link", c.Inbox.Link)

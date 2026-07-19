@@ -49,8 +49,8 @@ type InboxCreateJSON struct {
 	OccurredAt    *int64 `json:"occurred_at"`
 	Note          string `json:"note"`
 
-	CounterpartyID *string              `json:"counterparty_id"`
-	CategoryID     *string              `json:"category_id"`
+	CounterpartyID *string               `json:"counterparty_id"`
+	CategoryID     *string               `json:"category_id"`
 	Items          []InboxCreateItemJSON `json:"items"`
 }
 
@@ -215,6 +215,60 @@ func (h *InboxController) GetOne(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, entry)
+}
+
+// GetAccountCandidates godoc
+// @Summary Find account candidates from the receipt payment mask
+// @Description Matches the trailing 1-4 digits of EПЗ against physical and device-token card masks.
+// @Tags Inbox
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Inbox entry ID"
+// @Success 200 {array} services.InboxAccountCandidate
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 404 {object} map[string]string "Inbox entry not found"
+// @Router /inbox/{id}/account-candidates [get]
+func (h *InboxController) GetAccountCandidates(c *gin.Context) {
+	currentUser, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	candidates, err := h.service.FindAccountCandidates(c.Param("id"), currentUser.(*models.User))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Inbox entry not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, candidates)
+}
+
+// GetTransactionCandidates godoc
+// @Summary Find bank transaction candidates for an inbox receipt
+// @Description Returns unmatched synced transactions with the selected account and exact receipt amount.
+// @Tags Inbox
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Inbox entry ID"
+// @Success 200 {array} services.InboxTransactionCandidate
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 404 {object} map[string]string "Inbox entry not found"
+// @Router /inbox/{id}/transaction-candidates [get]
+func (h *InboxController) GetTransactionCandidates(c *gin.Context) {
+	currentUser, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	candidates, err := h.service.FindTransactionCandidates(c.Param("id"), currentUser.(*models.User))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Inbox entry not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, candidates)
 }
 
 // SelectAccount godoc

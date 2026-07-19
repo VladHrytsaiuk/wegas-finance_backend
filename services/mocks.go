@@ -462,6 +462,22 @@ func (m *MockInboxService) GetByID(id string, user *models.User) (*models.InboxE
 	return args.Get(0).(*models.InboxEntry), args.Error(1)
 }
 
+func (m *MockInboxService) FindAccountCandidates(id string, user *models.User) ([]InboxAccountCandidate, error) {
+	args := m.Called(id, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]InboxAccountCandidate), args.Error(1)
+}
+
+func (m *MockInboxService) FindTransactionCandidates(id string, user *models.User) ([]InboxTransactionCandidate, error) {
+	args := m.Called(id, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]InboxTransactionCandidate), args.Error(1)
+}
+
 func (m *MockInboxService) SelectAccount(id string, accountID string, user *models.User) (*models.InboxEntry, error) {
 	args := m.Called(id, accountID, user)
 	if args.Get(0) == nil {

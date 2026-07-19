@@ -25,6 +25,8 @@ func TestInboxController(t *testing.T) {
 
 	r.POST("/inbox", controller.Create)
 	r.GET("/inbox", controller.GetAll)
+	r.GET("/inbox/:id/account-candidates", controller.GetAccountCandidates)
+	r.GET("/inbox/:id/transaction-candidates", controller.GetTransactionCandidates)
 	r.GET("/inbox/:id", controller.GetOne)
 	r.PATCH("/inbox/:id/account", controller.SelectAccount)
 	r.POST("/inbox/:id/link", controller.Link)
@@ -49,6 +51,16 @@ func TestInboxController(t *testing.T) {
 		mockService.AssertExpectations(t)
 	})
 
+	t.Run("returns transaction candidates", func(t *testing.T) {
+		mockService.On("FindTransactionCandidates", "inbox-1", mock.Anything).Return([]services.InboxTransactionCandidate{{
+			TransactionID: "tx-1",
+			Score:         85,
+		}}, nil).Once()
+
+		w := PerformRequest(r, "GET", "/inbox/inbox-1/transaction-candidates", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
 	t.Run("GetAll Success", func(t *testing.T) {
 		total := int64(5000)
 		mockService.On("GetAll", mock.Anything, mock.Anything).Return([]models.InboxEntry{
@@ -70,6 +82,18 @@ func TestInboxController(t *testing.T) {
 		}, nil).Once()
 
 		w := PerformRequest(r, "GET", "/inbox/inbox-1", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("GetAccountCandidates Success", func(t *testing.T) {
+		mockService.On("FindAccountCandidates", "inbox-1", mock.Anything).Return([]services.InboxAccountCandidate{{
+			AccountID:     "acc-1",
+			MatchedDigits: 4,
+			Confidence:    "exact",
+			Recommended:   true,
+		}}, nil).Once()
+
+		w := PerformRequest(r, "GET", "/inbox/inbox-1/account-candidates", nil)
 		assert.Equal(t, http.StatusOK, w.Code)
 	})
 

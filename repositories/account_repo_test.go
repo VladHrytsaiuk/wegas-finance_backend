@@ -79,6 +79,36 @@ func TestAccountRepo_Integration(t *testing.T) {
 		assert.Equal(t, int64(600), updated.Balance)
 	})
 
+	t.Run("TestUpdateAccountCardNumbers", func(t *testing.T) {
+		id := uuid.NewString()
+		account := &models.Account{
+			Base:        models.Base{ID: id},
+			FamilyID:    familyID,
+			Name:        "Payment card",
+			Type:        "card",
+			CardNumber:  "1234",
+			CardNumbers: []string{"1234", "5678"},
+		}
+		assert.NoError(t, repo.Create(account))
+
+		account.CardNumbers = []string{"1234", "5678", "9012"}
+		assert.NoError(t, repo.Update(account))
+
+		accounts, err := repo.GetAllByFamilyID(familyID)
+		assert.NoError(t, err)
+
+		var saved *models.Account
+		for index := range accounts {
+			if accounts[index].ID == id {
+				saved = &accounts[index]
+				break
+			}
+		}
+		if assert.NotNil(t, saved) {
+			assert.Equal(t, []string{"1234", "5678", "9012"}, saved.CardNumbers)
+		}
+	})
+
 	t.Run("TestDeleteAccount", func(t *testing.T) {
 		id := uuid.NewString()
 		db.Create(&models.Account{
