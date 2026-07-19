@@ -48,6 +48,8 @@ type InboxCreateInput struct {
 	DiscountTotal *int64
 	Total         *int64
 	Currency      string
+	PaymentProvider string
+	PaymentMask     string
 	OccurredAt    *int64
 	Note          string
 
@@ -112,6 +114,8 @@ func (s *inboxService) Create(input InboxCreateInput, user *models.User) (*model
 		DiscountTotal:       input.DiscountTotal,
 		Total:               input.Total,
 		Currency:            input.Currency,
+		PaymentProvider:     input.PaymentProvider,
+		PaymentMask:         input.PaymentMask,
 		CounterpartyID:      input.CounterpartyID,
 		CategoryID:          input.CategoryID,
 	}

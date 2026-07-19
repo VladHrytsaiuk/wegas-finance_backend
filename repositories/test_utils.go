@@ -27,6 +27,8 @@ func SetupTestDB() (*gorm.DB, error) {
 		&models.ReceiptSource{},
 		&models.ReceiptSourceItem{},
 		&models.InboxEntry{},
+		&models.TelegramLink{},
+		&models.TelegramLinkToken{},
 		&models.Tag{},
 		&models.Counterparty{},
 		&models.CounterpartyBalance{},

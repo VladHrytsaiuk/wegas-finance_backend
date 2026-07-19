@@ -20,17 +20,20 @@ type Account struct {
 	StorageType   *StorageType `json:"storage_type" gorm:"foreignKey:StorageTypeID"`
 
 	// Банківські деталі
-	CardNumber    string `json:"card_number"`
-	Name          string `json:"name"`
-	PaymentSystem string `json:"payment_system"` // Visa/Mastercard
-	Currency      string `json:"currency"`
-	BankName      string `json:"bank_name"`
-	CardType      string `json:"card_type"` // Credit/Debit
+	CardNumber string `json:"card_number"`
+	// CardNumbers includes the physical card and device-token masks (Apple Pay / Google Pay).
+	// Only the last four digits are stored; CardNumber remains the primary display value.
+	CardNumbers   []string `json:"card_numbers" gorm:"serializer:json;type:text"`
+	Name          string   `json:"name"`
+	PaymentSystem string   `json:"payment_system"` // Visa/Mastercard
+	Currency      string   `json:"currency"`
+	BankName      string   `json:"bank_name"`
+	CardType      string   `json:"card_type"` // Credit/Debit
 
 	// Баланси
-	InitialBalance int64  `json:"initial_balance"`
-	Balance        int64  `json:"balance" gorm:"column:balance"` // Поточний кешований баланс
-	
+	InitialBalance int64 `json:"initial_balance"`
+	Balance        int64 `json:"balance" gorm:"column:balance"` // Поточний кешований баланс
+
 	Color      string `json:"color"`
 	IsArchived bool   `json:"is_archived"`
 }
@@ -88,7 +91,7 @@ type ShoppingList struct {
 	Visibility string `json:"visibility" gorm:"default:'public'"`
 	HiddenFrom string `json:"hidden_from"`
 
-	// Зв'язок: один список має багато покупок. 
+	// Зв'язок: один список має багато покупок.
 	// OnDelete:CASCADE означає, що якщо видалити список, всі покупки в ньому теж видаляться.
 	Items []ShoppingItem `json:"items" gorm:"foreignKey:ListID;constraint:OnDelete:CASCADE;"`
 }

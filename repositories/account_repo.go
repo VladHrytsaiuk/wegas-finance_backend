@@ -61,24 +61,25 @@ func (r *accountRepo) GetByID(id string) (*models.Account, error) {
 }
 
 func (r *accountRepo) Update(account *models.Account) error {
-	// 🔥 ВИПРАВЛЕНО: Додано повний перелік полів для Select, 
+	// 🔥 ВИПРАВЛЕНО: Додано повний перелік полів для Select,
 	// щоб GORM міг занулити GoalID або StorageTypeID при зміні типу.
 	return r.db.Model(account).
 		Select(
-			"Name", 
-			"Type", 
-			"Currency", 
-			"Balance", 
-			"InitialBalance", 
-			"Color", 
-			"BankName", 
-			"CardType", 
-			"CardNumber", 
-			"PaymentSystem", 
-			"UserID", 
-			"StorageTypeID", 
-			"GoalID", 
-			"UpdatedAt", 
+			"Name",
+			"Type",
+			"Currency",
+			"Balance",
+			"InitialBalance",
+			"Color",
+			"BankName",
+			"CardType",
+			"CardNumber",
+			"CardNumbers",
+			"PaymentSystem",
+			"UserID",
+			"StorageTypeID",
+			"GoalID",
+			"UpdatedAt",
 			"IsArchived",
 			"IsSynced", // Додано
 			"IsGroup",  // Додано

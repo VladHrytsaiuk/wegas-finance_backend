@@ -27,6 +27,10 @@ type AppControllers struct {
 	Settings     *controllers.SettingsController
 	Export       *controllers.ExportController
 	Import       *controllers.ImportController   // <--- Added
+	ReceiptIngestion *controllers.ReceiptIngestionController
+	TelegramLink *controllers.TelegramLinkController
+	TelegramBot  *controllers.TelegramBotController
+	TelegramWebhook *controllers.TelegramWebhookController
 	Monobank     *controllers.MonobankController // <--- Added
 	Asset        *controllers.AssetController
 	// Medical      *controllers.MedicalController
@@ -66,6 +70,8 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 		api.POST("/login/pin", c.Auth.LoginWithPIN)
 		api.POST("/feedback", c.Feedback.Submit)
 		api.POST("/monobank/webhook", c.Monobank.Webhook)
+		api.POST("/telegram/link/complete", c.TelegramLink.CompleteLink)
+		api.POST("/telegram/webhook", c.TelegramBot.Webhook)
 
 		// WebAuthn Public Endpoints
 		api.POST("/webauthn/login/options", c.WebAuthn.LoginOptions)
@@ -92,6 +98,14 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 			protected.GET("/export/transactions", c.Export.ExportTransactions)
 			protected.GET("/export/backup", c.Export.ExportBackup)
 			protected.POST("/import/upload", c.Import.UploadStatement)
+			protected.POST("/receipt-ingestion/xml", c.ReceiptIngestion.IngestXML)
+			protected.POST("/receipt-ingestion/url", c.ReceiptIngestion.IngestURL)
+			protected.GET("/integrations/telegram", c.TelegramLink.GetStatus)
+			protected.POST("/integrations/telegram/link-token", c.TelegramLink.CreateLinkToken)
+			protected.DELETE("/integrations/telegram/link", c.TelegramLink.RevokeLink)
+			protected.GET("/integrations/telegram/webhook", c.TelegramWebhook.GetStatus)
+			protected.POST("/integrations/telegram/webhook/sync", c.TelegramWebhook.SyncWebhook)
+			protected.DELETE("/integrations/telegram/webhook", c.TelegramWebhook.DeleteWebhook)
 
 			// --- PROFILE & USERS ---
 			protected.GET("/users/me", c.User.GetMe)

@@ -72,6 +72,8 @@ type ReceiptSource struct {
 	DiscountTotal *int64  `json:"discount_total"`
 	Total         *int64  `json:"total"`
 	Currency      string  `json:"currency"`
+	PaymentProvider string `json:"payment_provider"`
+	PaymentMask     string `json:"payment_mask"`
 
 	CounterpartyID *string `json:"counterparty_id" gorm:"index"`
 	CategoryID     *string `json:"category_id" gorm:"index"`

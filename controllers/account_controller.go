@@ -19,18 +19,19 @@ func NewAccountController(service services.AccountService) *AccountController {
 // --- HANDLERS ---
 
 type AccountInputJSON struct {
-	Name           string  `json:"name" binding:"required"`
-	Type           string  `json:"type" binding:"required"`
-	Currency       string  `json:"currency" binding:"required"`
-	InitialBalance int64   `json:"initial_balance"`
-	Color          string  `json:"color"`
-	CardNumber     string  `json:"card_number"`
-	PaymentSystem  string  `json:"payment_system"`
-	BankName       string  `json:"bank_name"`
-	CardType       string  `json:"card_type"` // Ви просили CardType
-	OwnerID        string  `json:"user_id"`
-	StorageTypeID  *string `json:"storage_type_id"`
-	GoalID         *string `json:"goal_id"`
+	Name           string   `json:"name" binding:"required"`
+	Type           string   `json:"type" binding:"required"`
+	Currency       string   `json:"currency" binding:"required"`
+	InitialBalance int64    `json:"initial_balance"`
+	Color          string   `json:"color"`
+	CardNumber     string   `json:"card_number"`
+	CardNumbers    []string `json:"card_numbers"`
+	PaymentSystem  string   `json:"payment_system"`
+	BankName       string   `json:"bank_name"`
+	CardType       string   `json:"card_type"` // Ви просили CardType
+	OwnerID        string   `json:"user_id"`
+	StorageTypeID  *string  `json:"storage_type_id"`
+	GoalID         *string  `json:"goal_id"`
 }
 
 type UpdateMobileAccountOrderJSON struct {
@@ -74,6 +75,7 @@ func (h *AccountController) Create(c *gin.Context) {
 		BankName:       jsonInput.BankName,
 		CardType:       jsonInput.CardType,
 		CardNumber:     jsonInput.CardNumber,
+		CardNumbers:    jsonInput.CardNumbers,
 		PaymentSystem:  jsonInput.PaymentSystem,
 		OwnerID:        jsonInput.OwnerID,
 		StorageTypeID:  jsonInput.StorageTypeID,
@@ -187,6 +189,7 @@ func (h *AccountController) Update(c *gin.Context) {
 		BankName:       jsonInput.BankName,
 		CardType:       jsonInput.CardType,
 		CardNumber:     jsonInput.CardNumber,
+		CardNumbers:    jsonInput.CardNumbers,
 		PaymentSystem:  jsonInput.PaymentSystem,
 		OwnerID:        jsonInput.OwnerID,
 		StorageTypeID:  jsonInput.StorageTypeID,

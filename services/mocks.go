@@ -5,6 +5,7 @@ import (
 	"mime/multipart"
 
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
+	"github.com/VladHrytsaiuk/wegas-finance/backend/pkg/telegram"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/repositories"
 	"github.com/stretchr/testify/mock"
 	"gorm.io/gorm"
@@ -483,6 +484,105 @@ func (m *MockInboxService) Unlink(id string, user *models.User) (*models.InboxEn
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.InboxEntry), args.Error(1)
+}
+
+// MockReceiptIngestionService
+type MockReceiptIngestionService struct {
+	mock.Mock
+}
+
+func (m *MockReceiptIngestionService) IngestXML(file *multipart.FileHeader, user *models.User) (*models.InboxEntry, error) {
+	args := m.Called(file, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.InboxEntry), args.Error(1)
+}
+
+func (m *MockReceiptIngestionService) IngestXMLBytes(raw []byte, user *models.User) (*models.InboxEntry, error) {
+	args := m.Called(raw, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.InboxEntry), args.Error(1)
+}
+
+func (m *MockReceiptIngestionService) IngestURL(rawURL string, user *models.User) (*models.InboxEntry, error) {
+	args := m.Called(rawURL, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.InboxEntry), args.Error(1)
+}
+
+// MockTelegramLinkService
+type MockTelegramLinkService struct {
+	mock.Mock
+}
+
+func (m *MockTelegramLinkService) GetStatus(user *models.User) (*TelegramLinkStatus, error) {
+	args := m.Called(user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*TelegramLinkStatus), args.Error(1)
+}
+
+func (m *MockTelegramLinkService) CreateLinkToken(user *models.User) (*TelegramLinkTokenResponse, error) {
+	args := m.Called(user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*TelegramLinkTokenResponse), args.Error(1)
+}
+
+func (m *MockTelegramLinkService) CompleteLink(input TelegramLinkCompleteInput) (*TelegramLinkStatus, error) {
+	args := m.Called(input)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*TelegramLinkStatus), args.Error(1)
+}
+
+func (m *MockTelegramLinkService) RevokeLink(user *models.User) error {
+	args := m.Called(user)
+	return args.Error(0)
+}
+
+// MockTelegramBotService
+type MockTelegramBotService struct {
+	mock.Mock
+}
+
+func (m *MockTelegramBotService) HandleUpdate(update *telegram.Update) error {
+	args := m.Called(update)
+	return args.Error(0)
+}
+
+// MockTelegramWebhookService
+type MockTelegramWebhookService struct {
+	mock.Mock
+}
+
+func (m *MockTelegramWebhookService) GetWebhookStatus() (*TelegramWebhookStatus, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*TelegramWebhookStatus), args.Error(1)
+}
+
+func (m *MockTelegramWebhookService) SyncWebhook() (*TelegramWebhookStatus, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*TelegramWebhookStatus), args.Error(1)
+}
+
+func (m *MockTelegramWebhookService) DeleteWebhook(dropPendingUpdates bool) error {
+	args := m.Called(dropPendingUpdates)
+	return args.Error(0)
 }
 
 // MockGoalService

@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
@@ -18,12 +19,42 @@ type CreateAccountInput struct {
 	InitialBalance int64
 	Color          string
 	CardNumber     string
+	CardNumbers    []string
 	PaymentSystem  string
 	OwnerID        string
 	BankName       string // Для карток (mono, privat...)
 	CardType       string // Для карток (black, gold...)
 	StorageTypeID  *string
 	GoalID         *string
+}
+
+func normalizeCardNumbers(primary string, numbers []string) []string {
+	seen := make(map[string]struct{}, len(numbers)+1)
+	result := make([]string, 0, len(numbers)+1)
+
+	for _, number := range append([]string{primary}, numbers...) {
+		number = strings.TrimSpace(number)
+		if len(number) != 4 {
+			continue
+		}
+		isDigits := true
+		for _, char := range number {
+			if char < '0' || char > '9' {
+				isDigits = false
+				break
+			}
+		}
+		if !isDigits {
+			continue
+		}
+		if _, exists := seen[number]; exists {
+			continue
+		}
+		seen[number] = struct{}{}
+		result = append(result, number)
+	}
+
+	return result
 }
 
 type AccountService interface {
@@ -77,6 +108,7 @@ func (s *accountService) Create(input CreateAccountInput, user *models.User) (*m
 		BankName:       input.BankName,
 		CardType:       input.CardType,
 		CardNumber:     input.CardNumber,
+		CardNumbers:    normalizeCardNumbers(input.CardNumber, input.CardNumbers),
 		PaymentSystem:  paymentSystem,
 		IsArchived:     false,
 		IsGroup:        false,
@@ -158,6 +190,7 @@ func (s *accountService) Update(id string, input CreateAccountInput, user *model
 	account.Type = input.Type
 	account.Color = input.Color
 	account.CardNumber = input.CardNumber
+	account.CardNumbers = normalizeCardNumbers(input.CardNumber, input.CardNumbers)
 	account.StorageTypeID = input.StorageTypeID
 	account.GoalID = finalGoalID
 

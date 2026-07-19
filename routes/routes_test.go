@@ -30,6 +30,10 @@ func TestSetupRoutes(t *testing.T) {
 		Settings:     &controllers.SettingsController{},
 		Export:       &controllers.ExportController{},
 		Import:       &controllers.ImportController{},
+		ReceiptIngestion: &controllers.ReceiptIngestionController{},
+		TelegramLink: &controllers.TelegramLinkController{},
+		TelegramBot:  &controllers.TelegramBotController{},
+		TelegramWebhook: &controllers.TelegramWebhookController{},
 		Monobank:     &controllers.MonobankController{},
 		Asset:        &controllers.AssetController{},
 		Utility:      &controllers.UtilityController{},
@@ -67,6 +71,8 @@ func TestSetupRoutes(t *testing.T) {
 	assert.True(t, findRoute("POST", "/api/users"))
 	assert.True(t, findRoute("POST", "/api/login"))
 	assert.True(t, findRoute("POST", "/api/feedback"))
+	assert.True(t, findRoute("POST", "/api/telegram/link/complete"))
+	assert.True(t, findRoute("POST", "/api/telegram/webhook"))
 
 	// Protected routes (prefix /api/)
 	assert.True(t, findRoute("GET", "/api/accounts"))
@@ -75,6 +81,14 @@ func TestSetupRoutes(t *testing.T) {
 	assert.True(t, findRoute("GET", "/api/transactions"))
 	assert.True(t, findRoute("POST", "/api/transactions"))
 	assert.True(t, findRoute("GET", "/api/dashboard/stats"))
+	assert.True(t, findRoute("POST", "/api/receipt-ingestion/xml"))
+	assert.True(t, findRoute("POST", "/api/receipt-ingestion/url"))
+	assert.True(t, findRoute("GET", "/api/integrations/telegram"))
+	assert.True(t, findRoute("POST", "/api/integrations/telegram/link-token"))
+	assert.True(t, findRoute("DELETE", "/api/integrations/telegram/link"))
+	assert.True(t, findRoute("GET", "/api/integrations/telegram/webhook"))
+	assert.True(t, findRoute("POST", "/api/integrations/telegram/webhook/sync"))
+	assert.True(t, findRoute("DELETE", "/api/integrations/telegram/webhook"))
 	
 	// Check count - should match the number of registered routes in SetupRoutes
 	// This is a good way to ensure no routes were accidentally removed or duplicated

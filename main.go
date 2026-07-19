@@ -11,6 +11,7 @@ import (
 	"github.com/VladHrytsaiuk/wegas-finance/backend/database"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/pkg/config"
+	"github.com/VladHrytsaiuk/wegas-finance/backend/pkg/telegram"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/repositories"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/routes"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/services"
@@ -131,6 +132,8 @@ func startApp() {
 		&models.ReceiptSource{},
 		&models.ReceiptSourceItem{},
 		&models.InboxEntry{},
+		&models.TelegramLink{},
+		&models.TelegramLinkToken{},
 		&models.Asset{},
 		&models.AssetPhoto{},
 		&models.AssetDocument{},
@@ -162,6 +165,7 @@ func startApp() {
 	waRepo := repositories.NewWebAuthnRepository(db)
 	accountRepo := repositories.NewAccountRepository(db)
 	inboxRepo := repositories.NewInboxRepository(db)
+	telegramLinkRepo := repositories.NewTelegramLinkRepository(db)
 	categoryRepo := repositories.NewCategoryRepository(db)
 	cpRepo := repositories.NewCounterpartyRepository(db)
 	tagRepo := repositories.NewTagRepository(db)
@@ -193,6 +197,21 @@ func startApp() {
 	authService := services.NewAuthService(userRepo, waRepo, jwtService, cfg.SecretKey, cfg.RegistrationCode)
 	accountService := services.NewAccountService(accountRepo, db)
 	inboxService := services.NewInboxService(inboxRepo, db)
+	receiptIngestionService := services.NewReceiptIngestionService(db, inboxService)
+	telegramLinkService := services.NewTelegramLinkService(telegramLinkRepo, db, cfg.TgReceiptBotUsername)
+	telegramWebhookService := services.NewTelegramWebhookService(
+		telegram.NewBotClient(cfg.TgReceiptBotToken),
+		cfg.AppURL,
+		cfg.TgReceiptWebhookSecret,
+	)
+	telegramBotService := services.NewTelegramBotService(
+		telegram.NewBotClient(cfg.TgReceiptBotToken),
+		telegramLinkRepo,
+		userRepo,
+		accountService,
+		inboxService,
+		receiptIngestionService,
+	)
 	tagService := services.NewTagService(tagRepo)
 	txService := services.NewTransactionService(db, txRepo, cpRepo, assetRepo, storageService, clock)
 	exportService := services.NewExportService(exportRepo)
@@ -219,10 +238,13 @@ func startApp() {
 		Auth: controllers.NewAuthController(authService), User: controllers.NewUserController(userService),
 		Account: controllers.NewAccountController(accountService), Category: controllers.NewCategoryController(categoryService),
 		Inbox: controllers.NewInboxController(inboxService),
+		TelegramLink: controllers.NewTelegramLinkController(telegramLinkService),
+		TelegramBot: controllers.NewTelegramBotController(telegramBotService, cfg.TgReceiptWebhookSecret),
+		TelegramWebhook: controllers.NewTelegramWebhookController(telegramWebhookService),
 		Counterparty: controllers.NewCounterpartyController(cpService), Tag: controllers.NewTagController(tagService),
 		Transaction: controllers.NewTransactionController(txService), Dashboard: controllers.NewDashboardController(statsService, userRepo),
 		Role: controllers.NewRoleController(roleService), Export: controllers.NewExportController(exportService),
-		Import: controllers.NewImportController(importService), Settings: controllers.NewSettingsController(userRepo),
+		Import: controllers.NewImportController(importService), ReceiptIngestion: controllers.NewReceiptIngestionController(receiptIngestionService), Settings: controllers.NewSettingsController(userRepo),
 		Monobank: controllers.NewMonobankController(monobankService), Asset: controllers.NewAssetController(assetService),
 		Utility: controllers.NewUtilityController(utilityService), Goal: controllers.NewGoalController(goalService),
 		StorageType: controllers.NewStorageTypeController(storageTypeService), Currency: controllers.NewCurrencyController(currencyService),

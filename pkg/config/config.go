@@ -17,8 +17,11 @@ type Config struct {
 	AppURL           string
 	
 	// Telegram
-	TgBotToken string
-	TgChatID   string
+	TgBotToken          string
+	TgChatID            string
+	TgReceiptBotToken   string
+	TgReceiptBotUsername string
+	TgReceiptWebhookSecret string
 }
 
 func LoadConfig() *Config {
@@ -37,8 +40,11 @@ func LoadConfig() *Config {
 		RPID:             getEnv("RP_ID", "localhost"),
 		AppURL:           getEnv("APP_URL", "http://localhost:3000"),
 		
-		TgBotToken:   getEnv("TG_BOT_TOKEN", ""),
-		TgChatID:     getEnv("TG_CHAT_ID", ""),
+		TgBotToken:              getEnv("TG_BOT_TOKEN", ""),
+		TgChatID:                getEnv("TG_CHAT_ID", ""),
+		TgReceiptBotToken:       getEnv("TG_RECEIPT_BOT_TOKEN", ""),
+		TgReceiptBotUsername:    getEnv("TG_RECEIPT_BOT_USERNAME", ""),
+		TgReceiptWebhookSecret:  getEnv("TG_RECEIPT_WEBHOOK_SECRET", ""),
 	}
 }
 
