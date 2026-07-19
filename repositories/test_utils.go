@@ -22,6 +22,8 @@ func SetupTestDB() (*gorm.DB, error) {
 		&models.Account{},
 		&models.Transaction{},
 		&models.TransactionItem{},
+		&models.ReceiptMerchantPreference{},
+		&models.ReceiptItemCategoryPreference{},
 		&models.TransactionPhoto{},
 		&models.TransactionTag{},
 		&models.ReceiptSource{},

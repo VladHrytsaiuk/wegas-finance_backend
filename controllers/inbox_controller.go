@@ -59,8 +59,9 @@ type InboxSelectAccountJSON struct {
 }
 
 type InboxLinkJSON struct {
-	TransactionID string `json:"transaction_id" binding:"required"`
-	ApplyItems    *bool  `json:"apply_items"`
+	TransactionID        string `json:"transaction_id" binding:"required"`
+	ApplyItems           *bool  `json:"apply_items"`
+	LearnFromTransaction bool   `json:"learn_from_transaction"`
 }
 
 func NewInboxController(service services.InboxService) *InboxController {
@@ -341,7 +342,7 @@ func (h *InboxController) Link(c *gin.Context) {
 		applyItems = *input.ApplyItems
 	}
 
-	entry, err := h.service.Link(c.Param("id"), input.TransactionID, applyItems, user)
+	entry, err := h.service.Link(c.Param("id"), input.TransactionID, applyItems, input.LearnFromTransaction, user)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return

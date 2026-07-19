@@ -68,7 +68,7 @@ type InboxService interface {
 	FindAccountCandidates(id string, user *models.User) ([]InboxAccountCandidate, error)
 	FindTransactionCandidates(id string, user *models.User) ([]InboxTransactionCandidate, error)
 	SelectAccount(id string, accountID string, user *models.User) (*models.InboxEntry, error)
-	Link(id string, transactionID string, applyItems bool, user *models.User) (*models.InboxEntry, error)
+	Link(id string, transactionID string, applyItems bool, learnFromTransaction bool, user *models.User) (*models.InboxEntry, error)
 	Unlink(id string, user *models.User) (*models.InboxEntry, error)
 }
 
@@ -483,13 +483,14 @@ func transactionItemsFromReceipt(source models.ReceiptSource, transactionID stri
 	for _, item := range source.Items {
 		itemsTotal += item.TotalAmount
 		items = append(items, models.TransactionItem{
-			Base:          models.Base{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now, IsSynced: true},
-			TransactionID: transactionID,
-			CategoryID:    item.CategoryID,
-			Name:          item.Name,
-			Quantity:      item.Quantity,
-			PricePerUnit:  item.PricePerUnit,
-			TotalAmount:   item.TotalAmount,
+			Base:            models.Base{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now, IsSynced: true},
+			TransactionID:   transactionID,
+			ReceiptSourceID: &source.ID,
+			CategoryID:      item.CategoryID,
+			Name:            item.Name,
+			Quantity:        item.Quantity,
+			PricePerUnit:    item.PricePerUnit,
+			TotalAmount:     item.TotalAmount,
 		})
 	}
 
@@ -504,12 +505,13 @@ func transactionItemsFromReceipt(source models.ReceiptSource, transactionID stri
 	// Keep the itemized total equal to the receipt and the bank transaction.
 	if len(items) == 0 && source.Subtotal != nil {
 		items = append(items, models.TransactionItem{
-			Base:          models.Base{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now, IsSynced: true},
-			TransactionID: transactionID,
-			Name:          "Проміжна сума за чеком",
-			Quantity:      1,
-			PricePerUnit:  *source.Subtotal,
-			TotalAmount:   *source.Subtotal,
+			Base:            models.Base{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now, IsSynced: true},
+			TransactionID:   transactionID,
+			ReceiptSourceID: &source.ID,
+			Name:            "Проміжна сума за чеком",
+			Quantity:        1,
+			PricePerUnit:    *source.Subtotal,
+			TotalAmount:     *source.Subtotal,
 		})
 	}
 
@@ -518,18 +520,19 @@ func transactionItemsFromReceipt(source models.ReceiptSource, transactionID stri
 		discount = -discount
 	}
 	items = append(items, models.TransactionItem{
-		Base:          models.Base{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now, IsSynced: true},
-		TransactionID: transactionID,
-		Name:          "Знижка за чеком",
-		Quantity:      1,
-		PricePerUnit:  -discount,
-		TotalAmount:   -discount,
+		Base:            models.Base{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now, IsSynced: true},
+		TransactionID:   transactionID,
+		ReceiptSourceID: &source.ID,
+		Name:            "Знижка за чеком",
+		Quantity:        1,
+		PricePerUnit:    -discount,
+		TotalAmount:     -discount,
 	})
 
 	return items
 }
 
-func (s *inboxService) Link(id string, transactionID string, applyItems bool, user *models.User) (*models.InboxEntry, error) {
+func (s *inboxService) Link(id string, transactionID string, applyItems bool, learnFromTransaction bool, user *models.User) (*models.InboxEntry, error) {
 	entry, err := s.repo.GetByID(id, user.FamilyID)
 	if err != nil {
 		return nil, err
@@ -539,7 +542,7 @@ func (s *inboxService) Link(id string, transactionID string, applyItems bool, us
 	}
 
 	var txModel models.Transaction
-	if err := s.db.Where("id = ? AND family_id = ? AND deleted_at IS NULL", transactionID, user.FamilyID).First(&txModel).Error; err != nil {
+	if err := s.db.Preload("Items").Where("id = ? AND family_id = ? AND deleted_at IS NULL", transactionID, user.FamilyID).First(&txModel).Error; err != nil {
 		return nil, err
 	}
 	if user.RoleID == "child" && txModel.UserID != user.ID {
@@ -559,6 +562,55 @@ func (s *inboxService) Link(id string, transactionID string, applyItems bool, us
 
 	now := time.Now().UnixMilli()
 	err = s.db.Transaction(func(tx *gorm.DB) error {
+		if learnFromTransaction {
+			// This branch is used only after the user reviewed the prefilled form.
+			// Preserve their choices and make the receipt learn from them.
+			originalSource := entry.ReceiptSource
+			originalSource.Items = append([]models.ReceiptSourceItem(nil), entry.ReceiptSource.Items...)
+			applyItems = false
+
+			sourceUpdates := map[string]interface{}{}
+			if txModel.CounterpartyID != "" {
+				entry.ReceiptSource.CounterpartyID = &txModel.CounterpartyID
+				sourceUpdates["counterparty_id"] = txModel.CounterpartyID
+			}
+			if txModel.CategoryID != "" {
+				entry.ReceiptSource.CategoryID = &txModel.CategoryID
+				sourceUpdates["category_id"] = txModel.CategoryID
+			}
+			if len(sourceUpdates) > 0 {
+				if err := tx.Model(&models.ReceiptSource{}).Where("id = ?", entry.ReceiptSourceID).Updates(sourceUpdates).Error; err != nil {
+					return err
+				}
+			}
+
+			usedItems := make(map[string]bool)
+			for sourceIndex := range entry.ReceiptSource.Items {
+				sourceItem := &entry.ReceiptSource.Items[sourceIndex]
+				for transactionIndex := range txModel.Items {
+					transactionItem := &txModel.Items[transactionIndex]
+					if usedItems[transactionItem.ID] || sourceItem.Name != transactionItem.Name || sourceItem.TotalAmount != transactionItem.TotalAmount {
+						continue
+					}
+					usedItems[transactionItem.ID] = true
+					transactionItem.ReceiptSourceID = &entry.ReceiptSourceID
+					if err := tx.Model(&models.TransactionItem{}).Where("id = ?", transactionItem.ID).Update("receipt_source_id", entry.ReceiptSourceID).Error; err != nil {
+						return err
+					}
+					if transactionItem.CategoryID != nil && *transactionItem.CategoryID != "" {
+						sourceItem.CategoryID = transactionItem.CategoryID
+						if err := tx.Model(&models.ReceiptSourceItem{}).Where("id = ?", sourceItem.ID).Update("category_id", *transactionItem.CategoryID).Error; err != nil {
+							return err
+						}
+					}
+					break
+				}
+			}
+			if err := learnReceiptPreferences(tx, user, &originalSource, txModel, txModel.Items, now); err != nil {
+				return err
+			}
+		}
+
 		if applyItems {
 			if err := tx.Where("transaction_id = ?", txModel.ID).Delete(&models.TransactionItem{}).Error; err != nil {
 				return err
@@ -572,10 +624,10 @@ func (s *inboxService) Link(id string, transactionID string, applyItems bool, us
 		}
 
 		updates := map[string]interface{}{}
-		if txModel.CounterpartyID == "" && entry.ReceiptSource.CounterpartyID != nil {
+		if !learnFromTransaction && entry.ReceiptSource.CounterpartyID != nil {
 			updates["counterparty_id"] = *entry.ReceiptSource.CounterpartyID
 		}
-		if txModel.CategoryID == "" && entry.ReceiptSource.CategoryID != nil {
+		if !learnFromTransaction && entry.ReceiptSource.CategoryID != nil {
 			updates["category_id"] = *entry.ReceiptSource.CategoryID
 		}
 		if txModel.ReceiptImg == "" && entry.ReceiptSource.FilePath != "" {
@@ -649,7 +701,7 @@ func (s *inboxService) Unlink(id string, user *models.User) (*models.InboxEntry,
 	}
 
 	err = s.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("transaction_id = ?", linkedTxID).Delete(&models.TransactionItem{}).Error; err != nil {
+		if err := tx.Where("transaction_id = ? AND receipt_source_id = ?", linkedTxID, entry.ReceiptSourceID).Delete(&models.TransactionItem{}).Error; err != nil {
 			return err
 		}
 

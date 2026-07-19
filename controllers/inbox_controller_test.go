@@ -113,7 +113,7 @@ func TestInboxController(t *testing.T) {
 
 	t.Run("Link Success", func(t *testing.T) {
 		txID := "tx-1"
-		mockService.On("Link", "inbox-1", txID, true, mock.Anything).Return(&models.InboxEntry{
+		mockService.On("Link", "inbox-1", txID, true, false, mock.Anything).Return(&models.InboxEntry{
 			Base:                 models.Base{ID: "inbox-1"},
 			Status:               models.InboxEntryStatusLinked,
 			MatchedTransactionID: &txID,

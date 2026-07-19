@@ -2,12 +2,10 @@ package services
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/services/parsers"
-	"github.com/VladHrytsaiuk/wegas-finance/backend/utils"
 )
 
 func (s *receiptIngestionService) parseReceiptXMLWithMerchantFallback(raw []byte, sourceURL string) (*parsers.ParsedReceipt, error) {
@@ -31,35 +29,30 @@ func (s *receiptIngestionService) createInboxFromParsedReceipt(
 		return existing, nil
 	}
 
-	counterpartyID := s.findCounterpartyID(user.FamilyID, receipt.Merchant)
-	categoryMap := s.loadCategoryMap(user.FamilyID)
+	preference, err := receiptPreferenceForMerchant(s.db, user, receipt.Merchant)
+	if err != nil {
+		return nil, err
+	}
+
+	var counterpartyID *string
+	var categoryID *string
+	if preference != nil {
+		counterpartyID = preference.CounterpartyID
+		categoryID = preference.CategoryID
+	}
+	if counterpartyID == nil {
+		counterpartyID = s.findCounterpartyID(user.FamilyID, receipt.Merchant)
+	}
 
 	var items []InboxCreateItemInput
-	categoryTotals := make(map[string]int64)
 	for _, item := range receipt.Items {
-		catID := utils.PredictCategoryID(item.Name, receipt.Merchant, "", "", "expense", categoryMap)
-		var categoryID *string
-		if catID != "" {
-			categoryID = &catID
-			categoryTotals[catID] += item.TotalAmount
-		}
 		items = append(items, InboxCreateItemInput{
 			Name:         item.Name,
 			Quantity:     item.Quantity,
 			PricePerUnit: item.PricePerUnit,
 			TotalAmount:  item.TotalAmount,
-			CategoryID:   categoryID,
+			CategoryID:   receiptItemCategoryForName(s.db, user, receipt.Merchant, item.Name),
 		})
-	}
-
-	var dominantCategoryID *string
-	var dominantTotal int64
-	for catID, total := range categoryTotals {
-		if total > dominantTotal {
-			id := catID
-			dominantCategoryID = &id
-			dominantTotal = total
-		}
 	}
 
 	parsedPayloadBytes, _ := json.Marshal(receipt)
@@ -77,28 +70,28 @@ func (s *receiptIngestionService) createInboxFromParsedReceipt(
 	paymentProvider, paymentMask := extractPrimaryPayment(receipt)
 
 	return s.inbox.Create(InboxCreateInput{
-		Status:         status,
-		Reason:         "parsed_receipt_pending_account",
-		ReviewRequired: &reviewRequired,
-		SourceType:     receipt.SourceType,
-		Origin:         origin,
-		SourceURL:      sourceURL,
-		RawPayload:     receipt.RawSource,
-		ParsedPayload:  string(parsedPayloadBytes),
-		Merchant:       receipt.Merchant,
-		ReceiptNumber:  receipt.ReceiptNumber,
-		ReceiptDate:    receiptDate,
-		Subtotal:       int64PtrIfNonZero(receipt.Subtotal),
-		DiscountTotal:  int64PtrIfNonZero(receipt.DiscountTotal),
-		Total:          int64PtrIfNonZero(receipt.Total),
-		Currency:       fallbackCurrency(receipt.Currency),
+		Status:          status,
+		Reason:          "parsed_receipt_pending_account",
+		ReviewRequired:  &reviewRequired,
+		SourceType:      receipt.SourceType,
+		Origin:          origin,
+		SourceURL:       sourceURL,
+		RawPayload:      receipt.RawSource,
+		ParsedPayload:   string(parsedPayloadBytes),
+		Merchant:        receipt.Merchant,
+		ReceiptNumber:   receipt.ReceiptNumber,
+		ReceiptDate:     receiptDate,
+		Subtotal:        int64PtrIfNonZero(receipt.Subtotal),
+		DiscountTotal:   int64PtrIfNonZero(receipt.DiscountTotal),
+		Total:           int64PtrIfNonZero(receipt.Total),
+		Currency:        fallbackCurrency(receipt.Currency),
 		PaymentProvider: paymentProvider,
 		PaymentMask:     paymentMask,
-		OccurredAt:     receiptDate,
-		Note:           buildReceiptNote(receipt),
-		CounterpartyID: counterpartyID,
-		CategoryID:     dominantCategoryID,
-		Items:          items,
+		OccurredAt:      receiptDate,
+		Note:            buildReceiptNote(receipt),
+		CounterpartyID:  counterpartyID,
+		CategoryID:      categoryID,
+		Items:           items,
 	}, user)
 }
 
@@ -142,19 +135,6 @@ func (s *receiptIngestionService) findExistingInboxEntry(
 	}
 
 	return &entry, nil
-}
-
-func (s *receiptIngestionService) loadCategoryMap(familyID string) map[string]string {
-	var categories []models.Category
-	mapping := make(map[string]string)
-	s.db.Where("family_id = ?", familyID).Find(&categories)
-
-	for _, cat := range categories {
-		exactKey := fmt.Sprintf("%s_%s", cat.Type, strings.ToLower(cat.Name))
-		mapping[exactKey] = cat.ID
-		mapping[strings.ToLower(cat.Name)] = cat.ID
-	}
-	return mapping
 }
 
 func (s *receiptIngestionService) findCounterpartyID(familyID string, merchant string) *string {

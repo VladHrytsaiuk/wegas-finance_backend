@@ -513,6 +513,7 @@ func (s *monobankService) Sync(userID string, targetAccountID string) (int, erro
 
 					normalizedName := utils.NormalizeCounterparty(mTx.Description)
 					mccStr := strconv.Itoa(mTx.Mcc)
+
 					categoryID := utils.PredictCategoryID(mTx.Description, normalizedName, mccStr, "", txType, categoryMap)
 
 					inputs = append(inputs, CreateTransactionInput{

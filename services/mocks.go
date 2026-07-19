@@ -486,8 +486,8 @@ func (m *MockInboxService) SelectAccount(id string, accountID string, user *mode
 	return args.Get(0).(*models.InboxEntry), args.Error(1)
 }
 
-func (m *MockInboxService) Link(id string, transactionID string, applyItems bool, user *models.User) (*models.InboxEntry, error) {
-	args := m.Called(id, transactionID, applyItems, user)
+func (m *MockInboxService) Link(id string, transactionID string, applyItems bool, learnFromTransaction bool, user *models.User) (*models.InboxEntry, error) {
+	args := m.Called(id, transactionID, applyItems, learnFromTransaction, user)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

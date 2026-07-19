@@ -454,7 +454,7 @@ func (s *txService) UnlinkReceiptSource(txID string, receiptSourceID string, use
 
 	now := s.clock.NowUnixMilli()
 	return s.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("transaction_id = ?", txID).Delete(&models.TransactionItem{}).Error; err != nil {
+		if err := tx.Where("transaction_id = ? AND receipt_source_id = ?", txID, source.ID).Delete(&models.TransactionItem{}).Error; err != nil {
 			return err
 		}
 

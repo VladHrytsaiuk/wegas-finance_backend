@@ -164,7 +164,7 @@ func TestLinkRejectsTransactionThatDoesNotMatchReceipt(t *testing.T) {
 			require.NoError(t, db.Create(&transaction).Error)
 
 			service := NewInboxService(repositories.NewInboxRepository(db), db)
-			_, err = service.Link(entry.ID, transaction.ID, false, user)
+			_, err = service.Link(entry.ID, transaction.ID, false, false, user)
 			require.Error(t, err)
 
 			var source models.ReceiptSource
