@@ -563,8 +563,7 @@ func (s *inboxService) Link(id string, transactionID string, applyItems bool, le
 	now := time.Now().UnixMilli()
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		if learnFromTransaction {
-			// This branch is used only after the user reviewed the prefilled form.
-			// Preserve their choices and make the receipt learn from them.
+			// The receipt form was reviewed by the user. Preserve its choices.
 			originalSource := entry.ReceiptSource
 			originalSource.Items = append([]models.ReceiptSourceItem(nil), entry.ReceiptSource.Items...)
 			applyItems = false

@@ -72,6 +72,7 @@ func TestTelegramBotController(t *testing.T) {
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		// Acknowledge Telegram even when processing fails to prevent duplicate retries.
+		assert.Equal(t, http.StatusOK, w.Code)
 	})
 }

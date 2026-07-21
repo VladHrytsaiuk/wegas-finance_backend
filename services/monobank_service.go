@@ -94,13 +94,13 @@ type MonobankService interface {
 }
 
 type monobankService struct {
-	db          *gorm.DB
-	txService   TransactionService
-	accountRepo repositories.AccountRepository
-	clock       utils.Clock
-	baseURL     string // <--- Додано для тестів
+	db            *gorm.DB
+	txService     TransactionService
+	accountRepo   repositories.AccountRepository
+	clock         utils.Clock
+	baseURL       string // <--- Додано для тестів
 	SkipRateLimit bool   // <--- Додано для тестів
-	
+
 	// Per-user sync status
 	mu      sync.RWMutex
 	syncMap map[string]SyncStatus
@@ -150,7 +150,7 @@ func (s *monobankService) waitForMonobankLimit(token string) {
 func (s *monobankService) GetSyncStatus(userID string) SyncStatus {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	if status, ok := s.syncMap[userID]; ok {
 		return status
 	}
@@ -201,6 +201,7 @@ func (s *monobankService) Connect(userID, familyID, rawToken string) ([]MonoAcco
 
 	return clientInfo.Accounts, nil
 }
+
 // 2. GetUserData - ТІЛЬКИ З БАЗИ (Для відображення статусу в профілі)
 func (s *monobankService) GetUserData(userID string) ([]MonoAccount, []models.BankAccountMapping, error) {
 	var conn models.BankConnection
@@ -513,7 +514,6 @@ func (s *monobankService) Sync(userID string, targetAccountID string) (int, erro
 
 					normalizedName := utils.NormalizeCounterparty(mTx.Description)
 					mccStr := strconv.Itoa(mTx.Mcc)
-
 					categoryID := utils.PredictCategoryID(mTx.Description, normalizedName, mccStr, "", txType, categoryMap)
 
 					inputs = append(inputs, CreateTransactionInput{

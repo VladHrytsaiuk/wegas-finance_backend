@@ -2,12 +2,10 @@ package services
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
-	"net"
 	"net/http"
 	neturl "net/url"
 	"regexp"
@@ -33,44 +31,6 @@ type receiptIngestionService struct {
 	httpClient *http.Client
 }
 
-func isSafeIP(ip net.IP) bool {
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
-		return false
-	}
-	return true
-}
-
-func secureTransport() *http.Transport {
-	dialer := &net.Dialer{
-		Timeout:   20 * time.Second,
-		KeepAlive: 30 * time.Second,
-	}
-	return &http.Transport{
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			host, port, err := net.SplitHostPort(addr)
-			if err != nil {
-				return nil, err
-			}
-			ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
-			if err != nil {
-				return nil, err
-			}
-			for _, ip := range ips {
-				if !isSafeIP(ip) {
-					return nil, fmt.Errorf("SSRF prevention: IP %s is not allowed", ip.String())
-				}
-			}
-			// Connect directly to the resolved IP to prevent DNS rebinding
-			return dialer.DialContext(ctx, network, net.JoinHostPort(ips[0].String(), port))
-		},
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
-}
-
 func NewReceiptIngestionService(db *gorm.DB, inbox InboxService) ReceiptIngestionService {
 	return &receiptIngestionService{
 		db:         db,
@@ -78,8 +38,7 @@ func NewReceiptIngestionService(db *gorm.DB, inbox InboxService) ReceiptIngestio
 		xmlParser:  parsers.NewSilpoXMLParser(),
 		htmlParser: parsers.NewSilpoHTMLParser(),
 		httpClient: &http.Client{
-			Timeout:   20 * time.Second,
-			Transport: secureTransport(),
+			Timeout: 20 * time.Second,
 		},
 	}
 }
