@@ -160,6 +160,7 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 
 			// --- INBOX ---
 			protected.POST("/inbox", c.Inbox.Create)
+			protected.POST("/inbox/photo", c.Inbox.CreatePhoto)
 			protected.GET("/inbox", c.Inbox.GetAll)
 			protected.GET("/inbox/:id/account-candidates", c.Inbox.GetAccountCandidates)
 			protected.GET("/inbox/:id/transaction-candidates", c.Inbox.GetTransactionCandidates)

@@ -239,7 +239,7 @@ func startApp() {
 	appControllers := routes.AppControllers{
 		Auth: controllers.NewAuthController(authService), User: controllers.NewUserController(userService),
 		Account: controllers.NewAccountController(accountService), Category: controllers.NewCategoryController(categoryService),
-		Inbox:           controllers.NewInboxController(inboxService),
+		Inbox:           controllers.NewInboxController(inboxService, storageService),
 		TelegramLink:    controllers.NewTelegramLinkController(telegramLinkService),
 		TelegramBot:     controllers.NewTelegramBotController(telegramBotService, cfg.TgReceiptWebhookSecret),
 		TelegramWebhook: controllers.NewTelegramWebhookController(telegramWebhookService),

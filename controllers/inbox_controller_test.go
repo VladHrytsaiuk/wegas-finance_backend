@@ -15,7 +15,8 @@ import (
 func TestInboxController(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	mockService := new(services.MockInboxService)
-	controller := NewInboxController(mockService)
+	mockStorage := new(services.MockStorageService)
+	controller := NewInboxController(mockService, mockStorage)
 
 	r := gin.Default()
 	r.Use(func(c *gin.Context) {
@@ -24,6 +25,7 @@ func TestInboxController(t *testing.T) {
 	})
 
 	r.POST("/inbox", controller.Create)
+	r.POST("/inbox/photo", controller.CreatePhoto)
 	r.GET("/inbox", controller.GetAll)
 	r.GET("/inbox/:id/account-candidates", controller.GetAccountCandidates)
 	r.GET("/inbox/:id/transaction-candidates", controller.GetTransactionCandidates)

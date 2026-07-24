@@ -66,21 +66,29 @@ func TestLocalStorageService(t *testing.T) {
 		// which makes it relative to current working directory.
 		// If baseDir in NewLocalStorageService is absolute, DeleteFile might fail if it's not handled correctly.
 		// However, let's test it as if we are in the root.
-		
+
 		path := "/uploads/temp/test.txt"
 		diskPath := filepath.Join("uploads", "temp", "test.txt")
 		os.MkdirAll(filepath.Dir(diskPath), 0755)
 		os.WriteFile(diskPath, []byte("data"), 0644)
-		
+
 		err := service.DeleteFile(path)
 		assert.NoError(t, err)
-		
+
 		_, err = os.Stat(diskPath)
 		assert.True(t, os.IsNotExist(err))
-		
+
 		// Cleanup
 		os.RemoveAll("uploads")
 	})
+}
+
+func TestResizeImage(t *testing.T) {
+	image := image.NewRGBA(image.Rect(0, 0, 3200, 1600))
+	resized := resizeImage(image, 1600)
+
+	assert.Equal(t, 1600, resized.Bounds().Dx())
+	assert.Equal(t, 800, resized.Bounds().Dy())
 }
 
 func createMockFileHeader(filename string, content []byte) *multipart.FileHeader {

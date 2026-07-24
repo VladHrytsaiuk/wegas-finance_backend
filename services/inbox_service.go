@@ -63,6 +63,7 @@ type InboxCreateInput struct {
 
 type InboxService interface {
 	Create(input InboxCreateInput, user *models.User) (*models.InboxEntry, error)
+	CreatePhoto(input InboxCreateInput, user *models.User) (*models.InboxEntry, error)
 	GetAll(filter InboxListFilter, user *models.User) ([]models.InboxEntry, int64, error)
 	GetByID(id string, user *models.User) (*models.InboxEntry, error)
 	FindAccountCandidates(id string, user *models.User) ([]InboxAccountCandidate, error)
@@ -193,6 +194,38 @@ func (s *inboxService) Create(input InboxCreateInput, user *models.User) (*model
 
 	return s.repo.GetByID(inboxEntryID, user.FamilyID)
 }
+
+// CreatePhoto accepts a manually captured receipt only for synced accounts.
+// Non-synced accounts continue through the regular transaction creation flow.
+func (s *inboxService) CreatePhoto(input InboxCreateInput, user *models.User) (*models.InboxEntry, error) {
+	if input.SelectedAccountID == nil || *input.SelectedAccountID == "" {
+		return nil, errors.New("account is required")
+	}
+	if input.FilePath == "" {
+		return nil, errors.New("receipt photo is required")
+	}
+
+	var account models.Account
+	if err := s.db.Where("id = ? AND family_id = ? AND deleted_at IS NULL", *input.SelectedAccountID, user.FamilyID).First(&account).Error; err != nil {
+		return nil, err
+	}
+	if !account.IsSynced {
+		return nil, errors.New("photo inbox is only required for synced accounts")
+	}
+
+	input.Status = models.InboxEntryStatusNeedsLink
+	input.Reason = "manual_photo_waiting_for_bank_transaction"
+	input.ReviewRequired = boolPtr(true)
+	input.SourceType = models.ReceiptSourceTypePhoto
+	input.Origin = models.ReceiptOriginManualPhoto
+	if input.Currency == "" {
+		input.Currency = account.Currency
+	}
+
+	return s.Create(input, user)
+}
+
+func boolPtr(value bool) *bool { return &value }
 
 func (s *inboxService) GetAll(filter InboxListFilter, user *models.User) ([]models.InboxEntry, int64, error) {
 	repoFilter := repositories.InboxFilter{

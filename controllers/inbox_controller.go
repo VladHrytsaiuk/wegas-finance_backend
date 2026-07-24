@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 type InboxController struct {
 	service services.InboxService
+	storage services.StorageService
 }
 
 type InboxCreateItemJSON struct {
@@ -64,8 +66,8 @@ type InboxLinkJSON struct {
 	LearnFromTransaction bool   `json:"learn_from_transaction"`
 }
 
-func NewInboxController(service services.InboxService) *InboxController {
-	return &InboxController{service: service}
+func NewInboxController(service services.InboxService, storage services.StorageService) *InboxController {
+	return &InboxController{service: service, storage: storage}
 }
 
 // Create godoc
@@ -137,6 +139,71 @@ func (h *InboxController) Create(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, entry)
+}
+
+// CreatePhoto accepts a manually captured receipt for a synced account.
+func (h *InboxController) CreatePhoto(c *gin.Context) {
+	currentUser, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	user := currentUser.(*models.User)
+
+	form, err := c.MultipartForm()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "multipart form error"})
+		return
+	}
+	files := form.File["file"]
+	if len(files) != 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "exactly one receipt photo is required"})
+		return
+	}
+
+	var input InboxCreateJSON
+	if err := json.Unmarshal([]byte(c.PostForm("json")), &input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid receipt payload"})
+		return
+	}
+	if input.SelectedAccountID == nil || input.Total == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "account and amount are required"})
+		return
+	}
+
+	path, err := h.storage.SaveImage(files[0], "receipts")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	entry, err := h.service.CreatePhoto(inboxCreateInput(input, path), user)
+	if err != nil {
+		_ = h.storage.DeleteFile(path)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, entry)
+}
+
+func inboxCreateInput(input InboxCreateJSON, filePath string) services.InboxCreateInput {
+	items := make([]services.InboxCreateItemInput, 0, len(input.Items))
+	for _, item := range input.Items {
+		items = append(items, services.InboxCreateItemInput{
+			Name: item.Name, Quantity: item.Quantity, PricePerUnit: item.PricePerUnit,
+			TotalAmount: item.TotalAmount, CategoryID: item.CategoryID,
+		})
+	}
+	return services.InboxCreateInput{
+		Status: input.Status, Reason: input.Reason, SelectedAccountID: input.SelectedAccountID,
+		ReviewRequired: input.ReviewRequired, SourceType: input.SourceType, Origin: input.Origin,
+		FilePath: filePath, SourceURL: input.SourceURL, MimeType: input.MimeType,
+		RawPayload: input.RawPayload, ParsedPayload: input.ParsedPayload, Merchant: input.Merchant,
+		ReceiptNumber: input.ReceiptNumber, ReceiptDate: input.ReceiptDate, Subtotal: input.Subtotal,
+		DiscountTotal: input.DiscountTotal, Total: input.Total, Currency: input.Currency,
+		OccurredAt: input.OccurredAt, Note: input.Note, CounterpartyID: input.CounterpartyID,
+		CategoryID: input.CategoryID, Items: items,
+	}
 }
 
 // GetAll godoc

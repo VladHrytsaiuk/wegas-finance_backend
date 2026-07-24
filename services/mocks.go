@@ -449,6 +449,14 @@ func (m *MockInboxService) Create(input InboxCreateInput, user *models.User) (*m
 	return args.Get(0).(*models.InboxEntry), args.Error(1)
 }
 
+func (m *MockInboxService) CreatePhoto(input InboxCreateInput, user *models.User) (*models.InboxEntry, error) {
+	args := m.Called(input, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.InboxEntry), args.Error(1)
+}
+
 func (m *MockInboxService) GetAll(filter InboxListFilter, user *models.User) ([]models.InboxEntry, int64, error) {
 	args := m.Called(filter, user)
 	return args.Get(0).([]models.InboxEntry), args.Get(1).(int64), args.Error(2)
