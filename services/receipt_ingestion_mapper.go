@@ -66,7 +66,7 @@ func (s *receiptIngestionService) createInboxFromParsedReceipt(
 	if len(items) == 0 {
 		status = models.InboxEntryStatusNeedsReview
 	}
-	reviewRequired := true
+	reviewRequired := user.RequireReceiptReview
 	paymentProvider, paymentMask := extractPrimaryPayment(receipt)
 
 	return s.inbox.Create(InboxCreateInput{
@@ -138,17 +138,21 @@ func (s *receiptIngestionService) findExistingInboxEntry(
 }
 
 func (s *receiptIngestionService) findCounterpartyID(familyID string, merchant string) *string {
-	normalized := strings.TrimSpace(merchant)
+	normalized := receiptMerchantKey(merchant)
 	if normalized == "" {
 		return nil
 	}
 
-	var cp models.Counterparty
-	err := s.db.Where("family_id = ? AND LOWER(name) = ? AND deleted_at IS NULL", familyID, strings.ToLower(normalized)).First(&cp).Error
-	if err != nil {
+	var counterparties []models.Counterparty
+	if err := s.db.Where("family_id = ? AND deleted_at IS NULL", familyID).Find(&counterparties).Error; err != nil {
 		return nil
 	}
-	return &cp.ID
+	for _, cp := range counterparties {
+		if receiptMerchantKey(cp.Name) == normalized {
+			return &cp.ID
+		}
+	}
+	return nil
 }
 
 func int64PtrIfNonZero(v int64) *int64 {

@@ -43,9 +43,9 @@ type InboxEntry struct {
 	OccurredAt *int64 `json:"occurred_at" gorm:"index"`
 	Note       string `json:"note"`
 
-	ReceiptSource       ReceiptSource `json:"receipt_source" gorm:"foreignKey:ReceiptSourceID"`
-	SelectedAccount     *Account      `json:"selected_account,omitempty" gorm:"foreignKey:SelectedAccountID"`
-	MatchedTransaction  *Transaction  `json:"matched_transaction,omitempty" gorm:"foreignKey:MatchedTransactionID"`
+	ReceiptSource      ReceiptSource `json:"receipt_source" gorm:"foreignKey:ReceiptSourceID"`
+	SelectedAccount    *Account      `json:"selected_account,omitempty" gorm:"foreignKey:SelectedAccountID"`
+	MatchedTransaction *Transaction  `json:"matched_transaction,omitempty" gorm:"foreignKey:MatchedTransactionID"`
 }
 
 // ReceiptSource stores the raw and normalized receipt payload regardless of
@@ -58,20 +58,21 @@ type ReceiptSource struct {
 	Origin     string `json:"origin" gorm:"index"`
 	SourceType string `json:"source_type" gorm:"index"`
 
-	FilePath string `json:"file_path"`
+	FilePath  string `json:"file_path"`
+	FilePaths string `json:"file_paths" gorm:"type:text"`
 	SourceURL string `json:"source_url"`
-	MimeType string `json:"mime_type"`
+	MimeType  string `json:"mime_type"`
 
 	RawPayload    string `json:"raw_payload" gorm:"type:text"`
 	ParsedPayload string `json:"parsed_payload" gorm:"type:text"`
 
-	Merchant      string  `json:"merchant"`
-	ReceiptNumber string  `json:"receipt_number"`
-	ReceiptDate   *int64  `json:"receipt_date" gorm:"index"`
-	Subtotal      *int64  `json:"subtotal"`
-	DiscountTotal *int64  `json:"discount_total"`
-	Total         *int64  `json:"total"`
-	Currency      string  `json:"currency"`
+	Merchant        string `json:"merchant"`
+	ReceiptNumber   string `json:"receipt_number"`
+	ReceiptDate     *int64 `json:"receipt_date" gorm:"index"`
+	Subtotal        *int64 `json:"subtotal"`
+	DiscountTotal   *int64 `json:"discount_total"`
+	Total           *int64 `json:"total"`
+	Currency        string `json:"currency"`
 	PaymentProvider string `json:"payment_provider"`
 	PaymentMask     string `json:"payment_mask"`
 
@@ -81,18 +82,18 @@ type ReceiptSource struct {
 	LinkedTransactionID *string `json:"linked_transaction_id" gorm:"index"`
 	LinkedAt            *int64  `json:"linked_at"`
 
-	Counterparty      *Counterparty        `json:"counterparty,omitempty" gorm:"foreignKey:CounterpartyID"`
-	Category          *Category            `json:"category,omitempty" gorm:"foreignKey:CategoryID"`
-	LinkedTransaction *Transaction         `json:"linked_transaction,omitempty" gorm:"foreignKey:LinkedTransactionID"`
-	Items             []ReceiptSourceItem  `json:"items" gorm:"foreignKey:ReceiptSourceID;constraint:OnDelete:CASCADE;"`
-	InboxEntries      []InboxEntry         `json:"inbox_entries,omitempty" gorm:"foreignKey:ReceiptSourceID;constraint:OnDelete:CASCADE;"`
+	Counterparty      *Counterparty       `json:"counterparty,omitempty" gorm:"foreignKey:CounterpartyID"`
+	Category          *Category           `json:"category,omitempty" gorm:"foreignKey:CategoryID"`
+	LinkedTransaction *Transaction        `json:"linked_transaction,omitempty" gorm:"foreignKey:LinkedTransactionID"`
+	Items             []ReceiptSourceItem `json:"items" gorm:"foreignKey:ReceiptSourceID;constraint:OnDelete:CASCADE;"`
+	InboxEntries      []InboxEntry        `json:"inbox_entries,omitempty" gorm:"foreignKey:ReceiptSourceID;constraint:OnDelete:CASCADE;"`
 }
 
 // ReceiptSourceItem stores parsed line items before they are applied to a
 // final transaction.
 type ReceiptSourceItem struct {
 	Base
-	ReceiptSourceID string `json:"receipt_source_id" gorm:"index"`
+	ReceiptSourceID string  `json:"receipt_source_id" gorm:"index"`
 	CategoryID      *string `json:"category_id" gorm:"index"`
 
 	Name         string `json:"name"`

@@ -173,3 +173,145 @@ func TestLinkRejectsTransactionThatDoesNotMatchReceipt(t *testing.T) {
 		})
 	}
 }
+
+func TestAutoLinkForAccount(t *testing.T) {
+	for _, tt := range []struct {
+		name          string
+		transactionAt []time.Duration
+		wantLinked    int
+	}{
+		{
+			name:          "links one high-confidence candidate",
+			transactionAt: []time.Duration{time.Hour},
+			wantLinked:    1,
+		},
+		{
+			name:          "keeps ambiguous candidates in inbox",
+			transactionAt: []time.Duration{time.Hour, 90 * time.Minute},
+			wantLinked:    0,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			db, err := repositories.SetupTestDB()
+			require.NoError(t, err)
+
+			familyID := uuid.NewString()
+			accountID := uuid.NewString()
+			user := &models.User{Base: models.Base{ID: uuid.NewString()}, FamilyID: familyID}
+			total := int64(93310)
+			receiptDate := time.Date(2026, time.July, 18, 12, 0, 0, 0, time.UTC).UnixMilli()
+
+			receipt := models.ReceiptSource{
+				Base:     models.Base{ID: uuid.NewString()},
+				FamilyID: familyID,
+				UserID:   user.ID,
+				Total:    &total,
+				Currency: "UAH",
+				FilePath: "/uploads/receipts/photo.jpg",
+			}
+			require.NoError(t, db.Create(&receipt).Error)
+
+			entry := models.InboxEntry{
+				Base:              models.Base{ID: uuid.NewString()},
+				FamilyID:          familyID,
+				UserID:            user.ID,
+				ReceiptSourceID:   receipt.ID,
+				SelectedAccountID: &accountID,
+				Status:            models.InboxEntryStatusNeedsLink,
+				ReviewRequired:    false,
+				Total:             &total,
+				Currency:          "UAH",
+				OccurredAt:        &receiptDate,
+			}
+			require.NoError(t, db.Create(&entry).Error)
+			require.NoError(t, db.Model(&models.InboxEntry{}).
+				Where("id = ?", entry.ID).
+				Update("review_required", false).Error)
+
+			for _, offset := range tt.transactionAt {
+				transaction := models.Transaction{
+					Base:       models.Base{ID: uuid.NewString()},
+					FamilyID:   familyID,
+					UserID:     user.ID,
+					AccountID:  accountID,
+					Amount:     total,
+					Currency:   "UAH",
+					Date:       receiptDate + int64(offset/time.Millisecond),
+					ExternalID: uuid.NewString(),
+					Type:       "expense",
+				}
+				require.NoError(t, db.Create(&transaction).Error)
+			}
+
+			service := NewInboxService(repositories.NewInboxRepository(db), db)
+			linked, err := service.AutoLinkForAccount(accountID, user)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantLinked, linked)
+
+			var refreshed models.InboxEntry
+			require.NoError(t, db.First(&refreshed, "id = ?", entry.ID).Error)
+			if tt.wantLinked == 1 {
+				assert.Equal(t, models.InboxEntryStatusLinked, refreshed.Status)
+				assert.NotNil(t, refreshed.MatchedTransactionID)
+			} else {
+				assert.Equal(t, models.InboxEntryStatusNeedsLink, refreshed.Status)
+				assert.Nil(t, refreshed.MatchedTransactionID)
+			}
+		})
+	}
+}
+
+func TestAutoLinkForAccountKeepsEntriesRequiringReview(t *testing.T) {
+	db, err := repositories.SetupTestDB()
+	require.NoError(t, err)
+
+	familyID := uuid.NewString()
+	accountID := uuid.NewString()
+	user := &models.User{Base: models.Base{ID: uuid.NewString()}, FamilyID: familyID}
+	total := int64(93310)
+	receiptDate := time.Date(2026, time.July, 18, 12, 0, 0, 0, time.UTC).UnixMilli()
+
+	receipt := models.ReceiptSource{
+		Base:     models.Base{ID: uuid.NewString()},
+		FamilyID: familyID,
+		UserID:   user.ID,
+		Total:    &total,
+		Currency: "UAH",
+	}
+	require.NoError(t, db.Create(&receipt).Error)
+
+	entry := models.InboxEntry{
+		Base:              models.Base{ID: uuid.NewString()},
+		FamilyID:          familyID,
+		UserID:            user.ID,
+		ReceiptSourceID:   receipt.ID,
+		SelectedAccountID: &accountID,
+		Status:            models.InboxEntryStatusNeedsLink,
+		ReviewRequired:    true,
+		Total:             &total,
+		Currency:          "UAH",
+		OccurredAt:        &receiptDate,
+	}
+	require.NoError(t, db.Create(&entry).Error)
+	require.NoError(t, db.Create(&models.Transaction{
+		Base:       models.Base{ID: uuid.NewString()},
+		FamilyID:   familyID,
+		UserID:     user.ID,
+		AccountID:  accountID,
+		Amount:     total,
+		Currency:   "UAH",
+		Date:       receiptDate + int64(time.Hour/time.Millisecond),
+		ExternalID: uuid.NewString(),
+		Type:       "expense",
+	}).Error)
+
+	service := NewInboxService(repositories.NewInboxRepository(db), db)
+	linked, err := service.AutoLinkForAccount(accountID, user)
+	require.NoError(t, err)
+	assert.Zero(t, linked)
+
+	var refreshed models.InboxEntry
+	require.NoError(t, db.First(&refreshed, "id = ?", entry.ID).Error)
+	assert.Equal(t, models.InboxEntryStatusNeedsLink, refreshed.Status)
+	assert.Nil(t, refreshed.MatchedTransactionID)
+}

@@ -27,9 +27,10 @@ func TestMonobankService_Integration(t *testing.T) {
 
 	mockTxService := new(MockTransactionService)
 	mockAccRepo := new(MockAccountRepository)
+	mockInboxService := new(MockInboxService)
 	mockClock := utils.NewMockClock(time.Now())
-	
-	svc := NewMonobankService(db, mockTxService, mockAccRepo, mockClock).(*monobankService)
+
+	svc := NewMonobankService(db, mockTxService, mockAccRepo, mockClock, mockInboxService).(*monobankService)
 	svc.SkipRateLimit = true
 
 	t.Run("Connect - success", func(t *testing.T) {
@@ -47,7 +48,7 @@ func TestMonobankService_Integration(t *testing.T) {
 		defer server.Close()
 
 		svc.baseURL = server.URL
-		
+
 		accounts, err := svc.Connect("u1", "f1", "test-token")
 		assert.NoError(t, err)
 		if assert.Len(t, accounts, 1) {
@@ -82,7 +83,7 @@ func TestMonobankService_Integration(t *testing.T) {
 
 		var conn models.BankConnection
 		db.First(&conn, "user_id = ?", "u1")
-		
+
 		// Setup mapping
 		db.Create(&models.BankAccountMapping{
 			ConnectionID:      conn.ID,
@@ -91,16 +92,18 @@ func TestMonobankService_Integration(t *testing.T) {
 			IsEnabled:         true,
 			Name:              "Test Acc",
 		})
-		
+
 		// Setup user
 		user := &models.User{Base: models.Base{ID: "u-sync"}, Name: "Sync User", FamilyID: "f-sync"}
 		db.Create(user)
 		db.Model(&conn).Updates(map[string]interface{}{"user_id": "u-sync", "family_id": "f-sync"})
 
 		mockTxService.On("BatchCreate", mock.Anything, mock.Anything).Return(1, nil).Once()
+		mockInboxService.On("AutoLinkForAccount", "internal-a1", mock.Anything).Return(0, nil).Once()
 
 		count, err := svc.Sync("u-sync", "")
 		assert.NoError(t, err)
 		assert.Equal(t, 1, count)
+		mockInboxService.AssertExpectations(t)
 	})
 }

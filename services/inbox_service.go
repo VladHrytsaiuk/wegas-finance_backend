@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
 	"sort"
 	"strings"
@@ -37,6 +38,7 @@ type InboxCreateInput struct {
 	Origin     string
 
 	FilePath  string
+	FilePaths []string
 	SourceURL string
 	MimeType  string
 
@@ -68,6 +70,8 @@ type InboxService interface {
 	GetByID(id string, user *models.User) (*models.InboxEntry, error)
 	FindAccountCandidates(id string, user *models.User) ([]InboxAccountCandidate, error)
 	FindTransactionCandidates(id string, user *models.User) ([]InboxTransactionCandidate, error)
+	TryAutoLink(id string, user *models.User) (*models.InboxEntry, bool, error)
+	AutoLinkForAccount(accountID string, user *models.User) (int, error)
 	SelectAccount(id string, accountID string, user *models.User) (*models.InboxEntry, error)
 	Link(id string, transactionID string, applyItems bool, learnFromTransaction bool, user *models.User) (*models.InboxEntry, error)
 	Unlink(id string, user *models.User) (*models.InboxEntry, error)
@@ -93,7 +97,19 @@ type InboxTransactionCandidate struct {
 	Note             string   `json:"note"`
 	CounterpartyName string   `json:"counterparty_name"`
 	Score            int      `json:"score"`
+	Confidence       string   `json:"confidence"`
 	MatchedBy        []string `json:"matched_by"`
+}
+
+func transactionCandidateConfidence(score int) string {
+	switch {
+	case score >= autoLinkMinimumScore:
+		return "high"
+	case score >= 75:
+		return "medium"
+	default:
+		return "low"
+	}
 }
 
 type inboxService struct {
@@ -115,7 +131,7 @@ func (s *inboxService) Create(input InboxCreateInput, user *models.User) (*model
 		status = models.InboxEntryStatusNew
 	}
 
-	reviewRequired := true
+	reviewRequired := user.RequireReceiptReview
 	if input.ReviewRequired != nil {
 		reviewRequired = *input.ReviewRequired
 	}
@@ -131,6 +147,7 @@ func (s *inboxService) Create(input InboxCreateInput, user *models.User) (*model
 		Origin:          input.Origin,
 		SourceType:      input.SourceType,
 		FilePath:        input.FilePath,
+		FilePaths:       marshalReceiptFilePaths(input.FilePaths),
 		SourceURL:       input.SourceURL,
 		MimeType:        input.MimeType,
 		RawPayload:      input.RawPayload,
@@ -183,7 +200,9 @@ func (s *inboxService) Create(input InboxCreateInput, user *models.User) (*model
 		if err := tx.Create(receiptSource).Error; err != nil {
 			return err
 		}
-		if err := tx.Create(entry).Error; err != nil {
+		// Select all fields so an explicit false review_required is not replaced
+		// with the database default of true.
+		if err := tx.Select("*").Create(entry).Error; err != nil {
 			return err
 		}
 		return nil
@@ -192,32 +211,45 @@ func (s *inboxService) Create(input InboxCreateInput, user *models.User) (*model
 		return nil, err
 	}
 
-	return s.repo.GetByID(inboxEntryID, user.FamilyID)
+	created, err := s.repo.GetByID(inboxEntryID, user.FamilyID)
+	if err != nil {
+		return nil, err
+	}
+	linked, _, err := s.TryAutoLink(created.ID, user)
+	if err != nil {
+		return nil, err
+	}
+	return linked, nil
 }
 
-// CreatePhoto accepts a manually captured receipt only for synced accounts.
-// Non-synced accounts continue through the regular transaction creation flow.
+// CreatePhoto stores an incomplete photo in Inbox. A complete non-synced
+// transaction still uses the normal transaction creation flow.
 func (s *inboxService) CreatePhoto(input InboxCreateInput, user *models.User) (*models.InboxEntry, error) {
-	if input.SelectedAccountID == nil || *input.SelectedAccountID == "" {
-		return nil, errors.New("account is required")
-	}
 	if input.FilePath == "" {
 		return nil, errors.New("receipt photo is required")
+	}
+	input.SourceType = models.ReceiptSourceTypePhoto
+	input.Origin = models.ReceiptOriginManualPhoto
+
+	if input.SelectedAccountID == nil || *input.SelectedAccountID == "" {
+		input.Status = models.InboxEntryStatusNeedsAccount
+		input.Reason = "manual_photo_missing_account"
+		input.ReviewRequired = boolPtr(true)
+		return s.Create(input, user)
 	}
 
 	var account models.Account
 	if err := s.db.Where("id = ? AND family_id = ? AND deleted_at IS NULL", *input.SelectedAccountID, user.FamilyID).First(&account).Error; err != nil {
 		return nil, err
 	}
-	if !account.IsSynced {
-		return nil, errors.New("photo inbox is only required for synced accounts")
+	if account.IsSynced {
+		input.Status = models.InboxEntryStatusNeedsLink
+		input.Reason = "manual_photo_waiting_for_bank_transaction"
+	} else {
+		input.Status = models.InboxEntryStatusNeedsReview
+		input.Reason = "manual_photo_missing_details"
 	}
-
-	input.Status = models.InboxEntryStatusNeedsLink
-	input.Reason = "manual_photo_waiting_for_bank_transaction"
 	input.ReviewRequired = boolPtr(true)
-	input.SourceType = models.ReceiptSourceTypePhoto
-	input.Origin = models.ReceiptOriginManualPhoto
 	if input.Currency == "" {
 		input.Currency = account.Currency
 	}
@@ -226,6 +258,30 @@ func (s *inboxService) CreatePhoto(input InboxCreateInput, user *models.User) (*
 }
 
 func boolPtr(value bool) *bool { return &value }
+
+func marshalReceiptFilePaths(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	encoded, _ := json.Marshal(paths)
+	return string(encoded)
+}
+
+func receiptFilePaths(source models.ReceiptSource) []string {
+	paths := []string{}
+	if source.FilePath != "" {
+		paths = append(paths, source.FilePath)
+	}
+	var extra []string
+	if source.FilePaths != "" && json.Unmarshal([]byte(source.FilePaths), &extra) == nil {
+		for _, path := range extra {
+			if path != "" && path != source.FilePath {
+				paths = append(paths, path)
+			}
+		}
+	}
+	return paths
+}
 
 func (s *inboxService) GetAll(filter InboxListFilter, user *models.User) ([]models.InboxEntry, int64, error) {
 	repoFilter := repositories.InboxFilter{
@@ -371,13 +427,13 @@ func absoluteDifference(first, second int64) int64 {
 }
 
 func receiptMerchantMatchesTransaction(source models.ReceiptSource, transaction models.Transaction) bool {
-	merchant := strings.ToLower(strings.TrimSpace(source.Merchant))
+	merchant := receiptMerchantKey(source.Merchant)
 	if merchant == "" {
 		return false
 	}
 
 	for _, value := range []string{transaction.Note, transaction.Counterparty.Name} {
-		value = strings.ToLower(strings.TrimSpace(value))
+		value = receiptMerchantKey(value)
 		if value != "" && (strings.Contains(value, merchant) || strings.Contains(merchant, value)) {
 			return true
 		}
@@ -433,6 +489,7 @@ func scoreTransactionCandidate(entry *models.InboxEntry, transaction models.Tran
 		Note:             transaction.Note,
 		CounterpartyName: transaction.Counterparty.Name,
 		Score:            score,
+		Confidence:       transactionCandidateConfidence(score),
 		MatchedBy:        matchedBy,
 	}
 }
@@ -489,6 +546,62 @@ func (s *inboxService) FindTransactionCandidates(id string, user *models.User) (
 	return candidates, nil
 }
 
+const autoLinkMinimumScore = 85
+
+func (s *inboxService) TryAutoLink(id string, user *models.User) (*models.InboxEntry, bool, error) {
+	entry, err := s.GetByID(id, user)
+	if err != nil {
+		return nil, false, err
+	}
+	if entry.ReviewRequired || entry.SelectedAccountID == nil || *entry.SelectedAccountID == "" {
+		return entry, false, nil
+	}
+	candidates, err := s.FindTransactionCandidates(id, user)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(candidates) != 1 || candidates[0].Score < autoLinkMinimumScore {
+		return entry, false, nil
+	}
+	linked, err := s.Link(id, candidates[0].TransactionID, len(entry.ReceiptSource.Items) > 0, false, user)
+	return linked, err == nil, err
+}
+
+// AutoLinkForAccount attaches only unambiguous high-confidence receipts after
+// a bank sync. Any competing candidate deliberately leaves the receipt in Inbox.
+func (s *inboxService) AutoLinkForAccount(accountID string, user *models.User) (int, error) {
+	if accountID == "" {
+		return 0, nil
+	}
+
+	filter := InboxListFilter{
+		Status: []string{
+			models.InboxEntryStatusNeedsLink,
+			models.InboxEntryStatusNeedsReview,
+		},
+	}
+	entries, _, err := s.GetAll(filter, user)
+	if err != nil {
+		return 0, err
+	}
+
+	linked := 0
+	for _, entry := range entries {
+		if entry.SelectedAccountID == nil || *entry.SelectedAccountID != accountID {
+			continue
+		}
+		_, didLink, err := s.TryAutoLink(entry.ID, user)
+		if err != nil {
+			return linked, err
+		}
+		if didLink {
+			linked++
+		}
+	}
+
+	return linked, nil
+}
+
 func (s *inboxService) SelectAccount(id string, accountID string, user *models.User) (*models.InboxEntry, error) {
 	entry, err := s.repo.GetByID(id, user.FamilyID)
 	if err != nil {
@@ -507,7 +620,15 @@ func (s *inboxService) SelectAccount(id string, accountID string, user *models.U
 		return nil, err
 	}
 
-	return s.repo.GetByID(id, user.FamilyID)
+	updated, err := s.repo.GetByID(id, user.FamilyID)
+	if err != nil {
+		return nil, err
+	}
+	linked, _, err := s.TryAutoLink(updated.ID, user)
+	if err != nil {
+		return nil, err
+	}
+	return linked, nil
 }
 
 func transactionItemsFromReceipt(source models.ReceiptSource, transactionID string, now int64) []models.TransactionItem {
@@ -671,10 +792,10 @@ func (s *inboxService) Link(id string, transactionID string, applyItems bool, le
 			}
 		}
 
-		if entry.ReceiptSource.FilePath != "" {
+		for _, receiptPath := range receiptFilePaths(entry.ReceiptSource) {
 			var existing int64
 			if err := tx.Model(&models.TransactionPhoto{}).
-				Where("transaction_id = ? AND path = ?", txModel.ID, entry.ReceiptSource.FilePath).
+				Where("transaction_id = ? AND path = ?", txModel.ID, receiptPath).
 				Count(&existing).Error; err != nil {
 				return err
 			}
@@ -682,7 +803,7 @@ func (s *inboxService) Link(id string, transactionID string, applyItems bool, le
 				photo := models.TransactionPhoto{
 					Base:          models.Base{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now, IsSynced: true},
 					TransactionID: txModel.ID,
-					Path:          entry.ReceiptSource.FilePath,
+					Path:          receiptPath,
 				}
 				if err := tx.Create(&photo).Error; err != nil {
 					return err
@@ -737,12 +858,12 @@ func (s *inboxService) Unlink(id string, user *models.User) (*models.InboxEntry,
 			return err
 		}
 
-		if entry.ReceiptSource.FilePath != "" {
-			if err := tx.Where("transaction_id = ? AND path = ?", linkedTxID, entry.ReceiptSource.FilePath).Delete(&models.TransactionPhoto{}).Error; err != nil {
+		for _, receiptPath := range receiptFilePaths(entry.ReceiptSource) {
+			if err := tx.Where("transaction_id = ? AND path = ?", linkedTxID, receiptPath).Delete(&models.TransactionPhoto{}).Error; err != nil {
 				return err
 			}
 			if err := tx.Model(&models.Transaction{}).
-				Where("id = ? AND receipt_img = ?", linkedTxID, entry.ReceiptSource.FilePath).
+				Where("id = ? AND receipt_img = ?", linkedTxID, receiptPath).
 				Update("receipt_img", "").Error; err != nil {
 				return err
 			}

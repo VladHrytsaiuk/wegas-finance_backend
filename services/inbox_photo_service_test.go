@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestInboxServiceCreatePhotoRequiresSyncedAccount(t *testing.T) {
+func TestInboxServiceCreatePhotoHandlesIncompleteReceipts(t *testing.T) {
 	db, err := repositories.SetupTestDB()
 	require.NoError(t, err)
 
@@ -44,14 +44,23 @@ func TestInboxServiceCreatePhotoRequiresSyncedAccount(t *testing.T) {
 		assert.Equal(t, account.ID, *entry.SelectedAccountID)
 	})
 
-	t.Run("rejects non-synced account", func(t *testing.T) {
+	t.Run("keeps non-synced photo without details in inbox", func(t *testing.T) {
 		account := createAccount(false)
 		service := NewInboxService(repositories.NewInboxRepository(db), db)
-		_, err := service.CreatePhoto(InboxCreateInput{
+		entry, err := service.CreatePhoto(InboxCreateInput{
 			SelectedAccountID: &account.ID,
 			FilePath:          "/uploads/receipts/check.jpg",
-			Total:             &total,
 		}, user)
-		require.Error(t, err)
+		require.NoError(t, err)
+		assert.Equal(t, models.InboxEntryStatusNeedsReview, entry.Status)
+		assert.Equal(t, "manual_photo_missing_details", entry.Reason)
+	})
+
+	t.Run("keeps photo without account in inbox", func(t *testing.T) {
+		service := NewInboxService(repositories.NewInboxRepository(db), db)
+		entry, err := service.CreatePhoto(InboxCreateInput{FilePath: "/uploads/receipts/check.jpg"}, user)
+		require.NoError(t, err)
+		assert.Equal(t, models.InboxEntryStatusNeedsAccount, entry.Status)
+		assert.Equal(t, "manual_photo_missing_account", entry.Reason)
 	})
 }

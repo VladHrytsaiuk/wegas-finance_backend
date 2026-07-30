@@ -156,8 +156,8 @@ func (h *InboxController) CreatePhoto(c *gin.Context) {
 		return
 	}
 	files := form.File["file"]
-	if len(files) != 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "exactly one receipt photo is required"})
+	if len(files) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "at least one receipt photo is required"})
 		return
 	}
 
@@ -166,20 +166,22 @@ func (h *InboxController) CreatePhoto(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid receipt payload"})
 		return
 	}
-	if input.SelectedAccountID == nil || input.Total == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "account and amount are required"})
-		return
+	paths := make([]string, 0, len(files))
+	for _, file := range files {
+		path, err := h.storage.SaveImage(file, "receipts")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		paths = append(paths, path)
 	}
-
-	path, err := h.storage.SaveImage(files[0], "receipts")
+	entryInput := inboxCreateInput(input, paths[0])
+	entryInput.FilePaths = paths
+	entry, err := h.service.CreatePhoto(entryInput, user)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	entry, err := h.service.CreatePhoto(inboxCreateInput(input, path), user)
-	if err != nil {
-		_ = h.storage.DeleteFile(path)
+		for _, path := range paths {
+			_ = h.storage.DeleteFile(path)
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

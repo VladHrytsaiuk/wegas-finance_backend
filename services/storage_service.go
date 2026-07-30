@@ -130,8 +130,8 @@ func (s *localStorageService) DeleteFile(path string) error {
 	if path == "" {
 		return nil
 	}
-	// Шлях у БД починається з /uploads/, тому додаємо крапку для відносного шляху на диску
-	// Використовуємо strings.TrimPrefix про всяк випадок
-	cleanPath := filepath.Join(".", strings.TrimPrefix(path, "/"))
+	// Public paths start with /uploads/. Keep their disk location aligned with
+	// the configured storage directory rather than the process working dir.
+	cleanPath := filepath.Join(s.baseDir, strings.TrimPrefix(path, "/uploads/"))
 	return os.Remove(cleanPath)
 }

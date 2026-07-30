@@ -46,3 +46,14 @@ func TestReceiptLearningRequiresTwoManualConfirmations(t *testing.T) {
 	}
 	assert.Equal(t, categoryID, *receiptItemCategoryForName(db, user, source.Merchant, source.Items[0].Name))
 }
+
+func TestReceiptMerchantKeyNormalizesChainVariants(t *testing.T) {
+	for input, expected := range map[string]string{
+		`ТОВ "Сільпо-Фуд" № 123`: "сільпо",
+		"СІЛЬПО Київ":            "сільпо",
+		"АТБ-Маркет #45":         "атб",
+		"Аврора 12":              "аврора",
+	} {
+		assert.Equal(t, expected, receiptMerchantKey(input), input)
+	}
+}

@@ -486,6 +486,19 @@ func (m *MockInboxService) FindTransactionCandidates(id string, user *models.Use
 	return args.Get(0).([]InboxTransactionCandidate), args.Error(1)
 }
 
+func (m *MockInboxService) TryAutoLink(id string, user *models.User) (*models.InboxEntry, bool, error) {
+	args := m.Called(id, user)
+	if args.Get(0) == nil {
+		return nil, args.Bool(1), args.Error(2)
+	}
+	return args.Get(0).(*models.InboxEntry), args.Bool(1), args.Error(2)
+}
+
+func (m *MockInboxService) AutoLinkForAccount(accountID string, user *models.User) (int, error) {
+	args := m.Called(accountID, user)
+	return args.Int(0), args.Error(1)
+}
+
 func (m *MockInboxService) SelectAccount(id string, accountID string, user *models.User) (*models.InboxEntry, error) {
 	args := m.Called(id, accountID, user)
 	if args.Get(0) == nil {

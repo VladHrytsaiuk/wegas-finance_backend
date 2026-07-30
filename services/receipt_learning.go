@@ -1,6 +1,7 @@
 package services
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
@@ -10,14 +11,35 @@ import (
 
 const receiptLearningMinConfirmations = 2
 
+var merchantBranchSuffix = regexp.MustCompile(`\s*(?:№|#)?\s*\d+\s*$`)
+
 func receiptLearningKey(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	value = strings.Join(strings.Fields(value), " ")
 	return strings.Trim(value, " .,:;!?\"'")
 }
 
+func receiptMerchantKey(value string) string {
+	key := receiptLearningKey(value)
+	key = strings.NewReplacer("-", " ", "_", " ", "\"", "", "'", "").Replace(key)
+	key = strings.Join(strings.Fields(key), " ")
+	key = merchantBranchSuffix.ReplaceAllString(key, "")
+
+	for alias, normalized := range map[string]string{
+		"сільпо": "сільпо",
+		"атб":    "атб",
+		"аврора": "аврора",
+	} {
+		if strings.Contains(key, alias) {
+			return normalized
+		}
+	}
+
+	return key
+}
+
 func receiptPreferenceForMerchant(db *gorm.DB, user *models.User, merchant string) (*models.ReceiptMerchantPreference, error) {
-	merchantKey := receiptLearningKey(merchant)
+	merchantKey := receiptMerchantKey(merchant)
 	if merchantKey == "" {
 		return nil, nil
 	}
@@ -35,7 +57,7 @@ func receiptPreferenceForMerchant(db *gorm.DB, user *models.User, merchant strin
 }
 
 func receiptItemCategoryForName(db *gorm.DB, user *models.User, merchant, itemName string) *string {
-	merchantKey := receiptLearningKey(merchant)
+	merchantKey := receiptMerchantKey(merchant)
 	itemKey := receiptLearningKey(itemName)
 	if merchantKey == "" || itemKey == "" {
 		return nil
@@ -52,7 +74,7 @@ func receiptItemCategoryForName(db *gorm.DB, user *models.User, merchant, itemNa
 }
 
 func learnReceiptPreferences(db *gorm.DB, user *models.User, source *models.ReceiptSource, transaction models.Transaction, transactionItems []models.TransactionItem, now int64) error {
-	merchantKey := receiptLearningKey(source.Merchant)
+	merchantKey := receiptMerchantKey(source.Merchant)
 	if merchantKey == "" {
 		return nil
 	}

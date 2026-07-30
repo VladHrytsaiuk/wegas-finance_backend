@@ -186,7 +186,7 @@ func startApp() {
 	wsHub := utils.NewWSHub()
 	go wsHub.Run()
 
-	storageService := services.NewLocalStorageService("./uploads")
+	storageService := services.NewLocalStorageService(cfg.UploadsDir)
 	clock := utils.NewRealClock()
 
 	importService := services.NewImportService(db)
@@ -221,7 +221,7 @@ func startApp() {
 	statsService := services.NewStatsService(statsRepo, currencyService)
 	assetService := services.NewAssetService(assetRepo, txRepo, storageService, clock)
 	utilityService := services.NewUtilityService(utilityRepo, txRepo, assetRepo)
-	monobankService := services.NewMonobankService(db, txService, accountRepo, clock)
+	monobankService := services.NewMonobankService(db, txService, accountRepo, clock, inboxService)
 	goalService := services.NewGoalService(goalRepo, accountRepo, currencyService)
 	storageTypeService := services.NewStorageTypeService(storageTypeRepo)
 	feedbackService := services.NewFeedbackService(cfg.TgBotToken, cfg.TgChatID)

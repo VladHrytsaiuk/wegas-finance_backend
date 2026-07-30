@@ -62,13 +62,8 @@ func TestLocalStorageService(t *testing.T) {
 	})
 
 	t.Run("DeleteFile", func(t *testing.T) {
-		// Note: DeleteFile implementation in storage_service.go uses filepath.Join(".", ...)
-		// which makes it relative to current working directory.
-		// If baseDir in NewLocalStorageService is absolute, DeleteFile might fail if it's not handled correctly.
-		// However, let's test it as if we are in the root.
-
 		path := "/uploads/temp/test.txt"
-		diskPath := filepath.Join("uploads", "temp", "test.txt")
+		diskPath := filepath.Join(tempDir, "temp", "test.txt")
 		os.MkdirAll(filepath.Dir(diskPath), 0755)
 		os.WriteFile(diskPath, []byte("data"), 0644)
 
@@ -77,9 +72,6 @@ func TestLocalStorageService(t *testing.T) {
 
 		_, err = os.Stat(diskPath)
 		assert.True(t, os.IsNotExist(err))
-
-		// Cleanup
-		os.RemoveAll("uploads")
 	})
 }
 

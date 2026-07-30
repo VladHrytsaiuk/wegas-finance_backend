@@ -96,6 +96,7 @@ type MonobankService interface {
 type monobankService struct {
 	db            *gorm.DB
 	txService     TransactionService
+	inboxService  InboxService
 	accountRepo   repositories.AccountRepository
 	clock         utils.Clock
 	baseURL       string // <--- Додано для тестів
@@ -110,8 +111,8 @@ type monobankService struct {
 	lastRequestMap map[string]time.Time
 }
 
-func NewMonobankService(db *gorm.DB, txService TransactionService, accountRepo repositories.AccountRepository, clock utils.Clock) MonobankService {
-	return &monobankService{
+func NewMonobankService(db *gorm.DB, txService TransactionService, accountRepo repositories.AccountRepository, clock utils.Clock, inboxServices ...InboxService) MonobankService {
+	service := &monobankService{
 		db:             db,
 		txService:      txService,
 		accountRepo:    accountRepo,
@@ -120,6 +121,10 @@ func NewMonobankService(db *gorm.DB, txService TransactionService, accountRepo r
 		syncMap:        make(map[string]SyncStatus),
 		lastRequestMap: make(map[string]time.Time),
 	}
+	if len(inboxServices) > 0 {
+		service.inboxService = inboxServices[0]
+	}
+	return service
 }
 
 // waitForMonobankLimit гарантує, що між запитами до Mono API з одним токеном минає мінімум 61 секунда
@@ -531,6 +536,11 @@ func (s *monobankService) Sync(userID string, targetAccountID string) (int, erro
 				if len(inputs) > 0 {
 					count, _ := s.txService.BatchCreate(inputs, &user)
 					totalImported += count
+					if count > 0 && s.inboxService != nil {
+						// Matching must never stop bank synchronization. Ambiguous
+						// receipts remain in Inbox for the user to review.
+						_, _ = s.inboxService.AutoLinkForAccount(mapping.InternalAccountID, &user)
+					}
 					status.TotalImported = totalImported
 					s.updateStatus(userID, status)
 				}

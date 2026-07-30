@@ -27,10 +27,11 @@ type User struct {
 	AvatarURL    string `json:"avatar_url"`
 
 	// Налаштування користувача
-	BaseCurrency        string `json:"base_currency" gorm:"default:'UAH'"`
-	Language            string `json:"language" gorm:"default:'uk'"`
-	Theme               string `json:"theme" gorm:"default:'light'"`
-	MobileAccountsOrder string `json:"mobile_accounts_order" gorm:"type:text"`
+	BaseCurrency         string `json:"base_currency" gorm:"default:'UAH'"`
+	Language             string `json:"language" gorm:"default:'uk'"`
+	Theme                string `json:"theme" gorm:"default:'light'"`
+	RequireReceiptReview bool   `json:"require_receipt_review" gorm:"default:true"`
+	MobileAccountsOrder  string `json:"mobile_accounts_order" gorm:"type:text"`
 
 	// Security flags (calculated)
 	HasPassword bool `json:"has_password" gorm:"-"`
