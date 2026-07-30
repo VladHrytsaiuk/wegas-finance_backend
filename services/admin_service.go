@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
-	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 )
 
@@ -28,22 +27,16 @@ func NewAdminService(db *gorm.DB) AdminService {
 func (s *adminService) GetUsers(limit, offset int, search string) ([]models.User, int64, error) {
 	var users []models.User
 	var count int64
-	var eg errgroup.Group
-
 	query := s.db.Model(&models.User{}).Where("deleted_at IS NULL")
 	if search != "" {
 		query = query.Where("email LIKE ? OR name LIKE ?", "%"+search+"%", "%"+search+"%")
 	}
 
-	eg.Go(func() error {
-		return query.Count(&count).Error
-	})
+	if err := query.Session(&gorm.Session{}).Count(&count).Error; err != nil {
+		return nil, 0, err
+	}
 
-	eg.Go(func() error {
-		return query.Preload("Family").Order("created_at desc").Limit(limit).Offset(offset).Find(&users).Error
-	})
-
-	if err := eg.Wait(); err != nil {
+	if err := query.Preload("Family").Order("created_at desc").Limit(limit).Offset(offset).Find(&users).Error; err != nil {
 		return nil, 0, err
 	}
 
