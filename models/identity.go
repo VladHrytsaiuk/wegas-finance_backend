@@ -32,6 +32,7 @@ type User struct {
 	Theme                string `json:"theme" gorm:"default:'light'"`
 	RequireReceiptReview bool   `json:"require_receipt_review" gorm:"default:true"`
 	MobileAccountsOrder  string `json:"mobile_accounts_order" gorm:"type:text"`
+	IsPlatformAdmin      bool   `json:"is_platform_admin" gorm:"default:false"`
 
 	// Security flags (calculated)
 	HasPassword bool `json:"has_password" gorm:"-"`

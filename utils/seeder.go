@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"strings"
 	"time"
 
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
@@ -14,8 +15,29 @@ type CategorySeed struct {
 	Name     string
 	Type     string
 	Color    string
-	Icon     string 
+	Icon     string
 	Children []CategorySeed
+}
+
+// SeedGlobalCatalog ensures templates exist even when the database already has
+// families created before global templates were introduced.
+func SeedGlobalCatalog(db *gorm.DB) error {
+	const bootstrapFamilyID = "__global_catalog_bootstrap__"
+	if err := SeedFamilyDefaults(db, bootstrapFamilyID); err != nil {
+		return err
+	}
+	if err := SeedDefaultCounterparties(db, bootstrapFamilyID); err != nil {
+		return err
+	}
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Unscoped().Where("family_id = ?", bootstrapFamilyID).Delete(&models.Counterparty{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Unscoped().Where("family_id = ?", bootstrapFamilyID).Delete(&models.CounterpartyCategory{}).Error; err != nil {
+			return err
+		}
+		return tx.Unscoped().Where("family_id = ?", bootstrapFamilyID).Delete(&models.Category{}).Error
+	})
 }
 
 func SeedFamilyDefaults(db *gorm.DB, familyID string) error {
@@ -31,7 +53,7 @@ func SeedFamilyDefaults(db *gorm.DB, familyID string) error {
 				{Name: "Молочка та яйця", Type: "expense", Color: "#fed7aa", Icon: "HiCube"},
 				{Name: "Овочі та фрукти", Type: "expense", Color: "#86efac", Icon: "HiSun"},
 				{Name: "Хліб та випічка", Type: "expense", Color: "#fb923c", Icon: "HiShoppingBag"}, // ⬅️ ЗАМІНА (був Супермаркет)
-				{Name: "Бакалія", Type: "expense", Color: "#fde047", Icon: "HiArchiveBox"}, // Крупи, макарони, олія
+				{Name: "Бакалія", Type: "expense", Color: "#fde047", Icon: "HiArchiveBox"},          // Крупи, макарони, олія
 				{Name: "Солодощі", Type: "expense", Color: "#f472b6", Icon: "HiCake"},
 				{Name: "Напої (додому)", Type: "expense", Color: "#a5f3fc", Icon: "HiBeaker"},
 				{Name: "Алкоголь", Type: "expense", Color: "#ef4444", Icon: "HiNoSymbol"},
@@ -47,7 +69,7 @@ func SeedFamilyDefaults(db *gorm.DB, familyID string) error {
 			Children: []CategorySeed{
 				{Name: "Ресторани", Type: "expense", Color: "#fbbf24", Icon: "HiStar"},
 				{Name: "Кава та перекуси", Type: "expense", Color: "#fcd34d", Icon: "HiBeaker"}, // Заміна HiMug
-				{Name: "Фастфуд", Type: "expense", Color: "#d97706", Icon: "HiBolt"}, // Заміна HiLightningBolt
+				{Name: "Фастфуд", Type: "expense", Color: "#d97706", Icon: "HiBolt"},            // Заміна HiLightningBolt
 				{Name: "Доставка їжі", Type: "expense", Color: "#b45309", Icon: "HiTruck"},
 				{Name: "Інше", Type: "expense", Color: "#d1d5db", Icon: "HiEllipsisHorizontalCircle"},
 			},
@@ -190,10 +212,10 @@ func SeedFamilyDefaults(db *gorm.DB, familyID string) error {
 		},
 		// 13. ПОДОРОЖІ
 		{
-			Name: "Подорожі",
-			Type: "expense",
+			Name:  "Подорожі",
+			Type:  "expense",
 			Color: "#06b6d4", // Cyan
-			Icon: "HiGlobeAmericas",
+			Icon:  "HiGlobeAmericas",
 			Children: []CategorySeed{
 				{Name: "Квитки (Потяг)", Type: "expense", Color: "#22d3ee", Icon: "HiTicket"},
 				{Name: "Квитки (Літак)", Type: "expense", Color: "#67e8f9", Icon: "HiPaperAirplane"},
@@ -246,10 +268,44 @@ func SeedFamilyDefaults(db *gorm.DB, familyID string) error {
 			},
 		},
 	}
-    
-    // ... createCategory код залишається без змін
-    var createCategory func(seed CategorySeed, parentID string) error
-	createCategory = func(seed CategorySeed, parentID string) error {
+
+	keyPart := func(value string) string {
+		return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(value)), " "))
+	}
+	var createCategory func(seed CategorySeed, familyParentID, globalParentID, parentPath, legacyParentKey string) error
+	createCategory = func(seed CategorySeed, familyParentID, globalParentID, parentPath, legacyParentKey string) error {
+		namePart := keyPart(seed.Name)
+		key := "category:" + seed.Type + ":" + parentPath + ":" + namePart
+		legacyKey := "category:" + seed.Type + ":" + legacyParentKey + ":" + namePart
+		var global models.Category
+		if err := db.Where("family_id = ? AND system_key = ?", "", key).First(&global).Error; err != nil {
+			if err != gorm.ErrRecordNotFound {
+				return err
+			}
+			// Previous releases passed a complete system key into recursion, which
+			// produced values such as category:expense:category:expense:root:… .
+			// Reuse and repair that template instead of creating a duplicate.
+			if legacyKey != key {
+				if legacyErr := db.Where("family_id = ? AND system_key = ?", "", legacyKey).First(&global).Error; legacyErr == nil {
+					if err := db.Model(&global).Update("system_key", key).Error; err != nil {
+						return err
+					}
+					global.SystemKey = key
+				} else if legacyErr != gorm.ErrRecordNotFound {
+					return legacyErr
+				}
+			}
+			if global.ID == "" {
+				global = models.Category{
+					Base:     models.Base{ID: uuid.NewString(), CreatedAt: time.Now().UnixMilli(), UpdatedAt: time.Now().UnixMilli(), IsSynced: true},
+					ParentID: globalParentID, SystemKey: key, Name: seed.Name, Type: seed.Type, Color: seed.Color, Icon: seed.Icon,
+				}
+				if err := db.Create(&global).Error; err != nil {
+					return err
+				}
+			}
+		}
+
 		cat := models.Category{
 			Base: models.Base{
 				ID:        uuid.NewString(),
@@ -257,21 +313,28 @@ func SeedFamilyDefaults(db *gorm.DB, familyID string) error {
 				UpdatedAt: time.Now().UnixMilli(),
 				IsSynced:  true,
 			},
-			FamilyID: familyID,
-			ParentID: parentID,
-			Name:     seed.Name,
-			Type:     seed.Type,
-			Color:    seed.Color,
-			Icon:     seed.Icon,
+			FamilyID:         familyID,
+			ParentID:         familyParentID,
+			Name:             seed.Name,
+			Type:             seed.Type,
+			Color:            seed.Color,
+			Icon:             seed.Icon,
+			GlobalTemplateID: &global.ID,
 		}
-		if err := db.Create(&cat).Error; err != nil { return err }
+		if err := db.Create(&cat).Error; err != nil {
+			return err
+		}
 		for _, child := range seed.Children {
-			if err := createCategory(child, cat.ID); err != nil { return err }
+			if err := createCategory(child, cat.ID, global.ID, parentPath+":"+namePart, legacyKey); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
 	for _, rootCat := range categories {
-		if err := createCategory(rootCat, ""); err != nil { return err }
+		if err := createCategory(rootCat, "", "", "root", "root"); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -288,8 +351,8 @@ func SeedDefaultCounterparties(db *gorm.DB, familyID string) error {
 		// Магазини (Type: shop)
 		{Name: "Супермаркети", Type: "shop", Icon: "HiShoppingCart", Color: "#f97316"},
 		{Name: "Дрогері та Аптеки", Type: "shop", Icon: "HiSparkles", Color: "#ec4899"},
-		{Name: "Дім та Ремонт", Type: "shop", Icon: "HiHome", Color: "#10b981"},         // <--- НОВЕ (Епіцентр, Юск)
-		{Name: "Одяг та Аксесуари", Type: "shop", Icon: "HiTag", Color: "#f472b6"},      // <--- НОВЕ (Sinsay, Staff)
+		{Name: "Дім та Ремонт", Type: "shop", Icon: "HiHome", Color: "#10b981"},    // <--- НОВЕ (Епіцентр, Юск)
+		{Name: "Одяг та Аксесуари", Type: "shop", Icon: "HiTag", Color: "#f472b6"}, // <--- НОВЕ (Sinsay, Staff)
 		{Name: "Техніка та Електроніка", Type: "shop", Icon: "HiComputerDesktop", Color: "#3b82f6"},
 		{Name: "Маркетплейси", Type: "shop", Icon: "HiShoppingBag", Color: "#84cc16"},
 		{Name: "АЗС", Type: "shop", Icon: "HiFunnel", Color: "#eab308"},
@@ -301,21 +364,37 @@ func SeedDefaultCounterparties(db *gorm.DB, familyID string) error {
 		{Name: "Поштові служби", Type: "other", Icon: "HiInbox", Color: "#6366f1"},
 		{Name: "Зв'язок та Інтернет", Type: "other", Icon: "HiWifi", Color: "#8b5cf6"},
 		{Name: "Підписки та Сервіси", Type: "other", Icon: "HiPlay", Color: "#a855f7"},
-		{Name: "Розваги та Спорт", Type: "other", Icon: "HiTicket", Color: "#d946ef"},   // <--- НОВЕ (Кіно, Зал)
+		{Name: "Розваги та Спорт", Type: "other", Icon: "HiTicket", Color: "#d946ef"}, // <--- НОВЕ (Кіно, Зал)
 		{Name: "Здоров'я", Type: "other", Icon: "HiHeart", Color: "#ef4444"},
 		{Name: "Комунальні послуги", Type: "other", Icon: "HiLightningBolt", Color: "#f59e0b"}, // Або HiHome
 	}
 
 	catMap := make(map[string]string)
+	globalCatMap := make(map[string]string)
 	for _, catData := range categoriesData {
+		key := "counterparty-category:" + catData.Type + ":" + strings.ToLower(strings.TrimSpace(catData.Name))
+		var global models.CounterpartyCategory
+		if err := db.Where("family_id = ? AND system_key = ?", "", key).First(&global).Error; err != nil {
+			if err != gorm.ErrRecordNotFound {
+				return err
+			}
+			global = models.CounterpartyCategory{
+				Base:      models.Base{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now, IsSynced: true},
+				SystemKey: key, Name: catData.Name, Type: catData.Type, Icon: catData.Icon, Color: catData.Color,
+			}
+			if err := db.Create(&global).Error; err != nil {
+				return err
+			}
+		}
 		cat := models.CounterpartyCategory{
 			Base:     models.Base{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now, IsSynced: true},
-			FamilyID: familyID, Name: catData.Name, Type: catData.Type, Icon: catData.Icon, Color: catData.Color,
+			FamilyID: familyID, GlobalTemplateID: &global.ID, Name: catData.Name, Type: catData.Type, Icon: catData.Icon, Color: catData.Color,
 		}
 		if err := db.Create(&cat).Error; err != nil {
 			return err
 		}
 		catMap[cat.Name] = cat.ID
+		globalCatMap[cat.Name] = global.ID
 	}
 
 	// 2. СТВОРЮЄМО КОНТРАГЕНТІВ
@@ -389,14 +468,14 @@ func SeedDefaultCounterparties(db *gorm.DB, familyID string) error {
 		{Name: "Rozetka", Type: "shop", CatName: "Маркетплейси", Logo: "rozetka.svg"},
 		{Name: "Prom.ua", Type: "shop", CatName: "Маркетплейси", Logo: "prom.svg"},
 		{Name: "AliExpress", Type: "shop", CatName: "Маркетплейси", Logo: "aliexpress.svg"}, // Переніс сюди з підписок
-			
+
 		// === КАФЕ ТА РЕСТОРАНИ ===
 		{Name: "McDonald's", Type: "shop", CatName: "Кафе та Ресторани", Logo: "mcdonalds.svg"},
 		{Name: "KFC", Type: "shop", CatName: "Кафе та Ресторани", Logo: "kfc.svg"},
 		{Name: "Puzata Hata", Type: "shop", CatName: "Кафе та Ресторани", Logo: "puzatahata.svg"},
 		{Name: "fichepizza", Type: "shop", CatName: "Кафе та Ресторани", Logo: "fichepizza.svg"},
 		{Name: "iq pizza", Type: "shop", CatName: "Кафе та Ресторани", Logo: "iq_pizza.svg"},
-		{Name: "Вацак", Type: "shop", CatName: "Кафе та Ресторани", Logo: "vatsak.svg"}, 
+		{Name: "Вацак", Type: "shop", CatName: "Кафе та Ресторани", Logo: "vatsak.svg"},
 
 		// Кондитерська = кафе/магазин
 		{Name: "Перша пекарня твого міста", Type: "shop", CatName: "Кафе та Ресторани", Logo: "pptm.svg"},
@@ -405,7 +484,7 @@ func SeedDefaultCounterparties(db *gorm.DB, familyID string) error {
 		{Name: "Нова Пошта", Type: "other", CatName: "Поштові служби", Logo: "novaposhta.svg"},
 		{Name: "Укрпошта", Type: "other", CatName: "Поштові служби", Logo: "ukrposhta.svg"},
 		{Name: "Meest", Type: "other", CatName: "Поштові служби", Logo: "meest.svg"},
-			
+
 		// === ТАКСІ ТА ТРАНСПОРТ ===
 		{Name: "Uklon", Type: "other", CatName: "Таксі та Транспорт", Logo: "uklon.svg"},
 		{Name: "Bolt", Type: "other", CatName: "Таксі та Транспорт", Logo: "bolt.svg"},
@@ -416,7 +495,7 @@ func SeedDefaultCounterparties(db *gorm.DB, familyID string) error {
 		// === ДОСТАВКА ЇЖІ (Це сервіс, тому 'other') ===
 		{Name: "Glovo", Type: "other", CatName: "Доставка їжі", Logo: "glovo.svg"},
 		{Name: "Bolt Food", Type: "other", CatName: "Доставка їжі", Logo: "bolt_food.svg"},
-			
+
 		// === ЗВ'ЯЗОК ===
 		{Name: "Kyivstar", Type: "other", CatName: "Зв'язок та Інтернет", Logo: "kyivstar.svg"},
 		{Name: "Vodafone", Type: "other", CatName: "Зв'язок та Інтернет", Logo: "vodafone.svg"},
@@ -472,19 +551,37 @@ func SeedDefaultCounterparties(db *gorm.DB, familyID string) error {
 		if id, ok := catMap[d.CatName]; ok {
 			catID = &id
 		}
+		var globalCategoryID *string
+		if id, ok := globalCatMap[d.CatName]; ok {
+			globalCategoryID = &id
+		}
+		key := "counterparty:" + d.Type + ":" + strings.ToLower(strings.TrimSpace(d.Name))
+		var global models.Counterparty
+		if err := db.Where("family_id = ? AND system_key = ?", "", key).First(&global).Error; err != nil {
+			if err != gorm.ErrRecordNotFound {
+				return err
+			}
+			global = models.Counterparty{
+				Base:      models.Base{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now, IsSynced: true},
+				SystemKey: key, Name: d.Name, Type: d.Type, CategoryID: globalCategoryID, Logo: d.Logo,
+			}
+			if err := db.Create(&global).Error; err != nil {
+				return err
+			}
+		}
 		counterparties = append(counterparties, models.Counterparty{
-			Base:       models.Base{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now, IsSynced: true},
-			FamilyID:   familyID,
-			Name:       d.Name,
-			Type:       d.Type,
-			CategoryID: catID,
-			Logo:       d.Logo,
+			Base:             models.Base{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now, IsSynced: true},
+			FamilyID:         familyID,
+			GlobalTemplateID: &global.ID,
+			Name:             d.Name,
+			Type:             d.Type,
+			CategoryID:       catID,
+			Logo:             d.Logo,
 		})
 	}
 
 	return db.Create(&counterparties).Error
 }
-
 
 // ... (твій попередній код Counterparties)
 
@@ -495,7 +592,7 @@ func SeedSystemStorageTypes(db *gorm.DB) error {
 	types := []models.StorageType{
 		{Name: "Конверт", Slug: "envelope", Icon: "HiEnvelope", IsSystem: true},
 		{Name: "Сейф", Slug: "safe", Icon: "HiLockClosed", IsSystem: true},
-		{Name: "Банка", Slug: "jar", Icon: "HiArchiveBox", IsSystem: true}, // Для Монобанку
+		{Name: "Банка", Slug: "jar", Icon: "HiArchiveBox", IsSystem: true},            // Для Монобанку
 		{Name: "Скарбничка", Slug: "piggy", Icon: "HiCurrencyDollar", IsSystem: true}, // Класична свинка
 		{Name: "Готівка (Схов)", Slug: "cash_stash", Icon: "HiBanknotes", IsSystem: true},
 		{Name: "Крипто-гаманець", Slug: "crypto_wallet", Icon: "HiCpuChip", IsSystem: true},
@@ -508,7 +605,7 @@ func SeedSystemStorageTypes(db *gorm.DB) error {
 		err := db.Model(&models.StorageType{}).
 			Where("slug = ? AND family_id IS NULL", t.Slug).
 			Count(&count).Error
-		
+
 		if err != nil {
 			return err
 		}

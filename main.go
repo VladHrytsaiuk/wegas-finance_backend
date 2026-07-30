@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"strings"
 
 	// 🔥 ДОДАЙ ЦЕЙ ІМПОРТ
 	"time"
@@ -107,6 +108,23 @@ func main() {
 	}
 }
 
+func bootstrapPlatformAdmins(db *gorm.DB, configuredEmails string) {
+	for _, rawEmail := range strings.Split(configuredEmails, ",") {
+		email := strings.TrimSpace(strings.ToLower(rawEmail))
+		if email == "" {
+			continue
+		}
+		result := db.Model(&models.User{}).
+			Where("LOWER(email) = ? AND deleted_at IS NULL", email).
+			Update("is_platform_admin", true)
+		if result.Error != nil {
+			log.Printf("failed to bootstrap platform admin %q: %v", email, result.Error)
+		} else if result.RowsAffected > 0 {
+			log.Printf("platform admin access granted to %s", email)
+		}
+	}
+}
+
 func startApp() {
 	cfg := config.LoadConfig()
 	db := database.InitDB(cfg.DBPath)
@@ -151,9 +169,18 @@ func startApp() {
 		&models.MedicalRecord{},
 		&models.MedicalFile{},
 		&models.WebAuthnCredential{},
+		&models.SchemaMigration{},
 	)
 	if err != nil {
 		log.Fatal("❌ Migration error:", err)
+	}
+
+	bootstrapPlatformAdmins(db, cfg.PlatformAdminEmails)
+	if err := utils.SeedGlobalCatalog(db); err != nil {
+		log.Fatal("❌ Global catalog seed error:", err)
+	}
+	if err := database.RunDataMigrations(db, cfg.DBPath, database.DataMigrations); err != nil {
+		log.Fatal("❌ Data migration error:", err)
 	}
 
 	go func() {
@@ -249,7 +276,8 @@ func startApp() {
 		Import: controllers.NewImportController(importService), ReceiptIngestion: controllers.NewReceiptIngestionController(receiptIngestionService), Settings: controllers.NewSettingsController(userRepo),
 		Monobank: controllers.NewMonobankController(monobankService), Asset: controllers.NewAssetController(assetService),
 		Utility: controllers.NewUtilityController(utilityService), Goal: controllers.NewGoalController(goalService),
-		StorageType: controllers.NewStorageTypeController(storageTypeService), Currency: controllers.NewCurrencyController(currencyService),
+		AdminCatalog: controllers.NewAdminCatalogController(db),
+		StorageType:  controllers.NewStorageTypeController(storageTypeService), Currency: controllers.NewCurrencyController(currencyService),
 		Feedback: controllers.NewFeedbackController(feedbackService),
 		Shopping: controllers.NewShoppingController(shoppingService),
 		Wishlist: controllers.NewWishlistController(wishlistService), // <--- 4. ДОДАНО КОНТРОЛЕР

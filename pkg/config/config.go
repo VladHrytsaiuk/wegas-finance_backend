@@ -8,19 +8,20 @@ import (
 )
 
 type Config struct {
-	ServerPort   string
-	DBPath       string
-	UploadsDir   string
-	SecretKey    string
-	RegistrationCode string // <--- Додали
-	RPID             string
-	AppURL           string
-	
+	ServerPort          string
+	DBPath              string
+	UploadsDir          string
+	SecretKey           string
+	RegistrationCode    string // <--- Додали
+	RPID                string
+	AppURL              string
+	PlatformAdminEmails string
+
 	// Telegram
-	TgBotToken          string
-	TgChatID            string
-	TgReceiptBotToken   string
-	TgReceiptBotUsername string
+	TgBotToken             string
+	TgChatID               string
+	TgReceiptBotToken      string
+	TgReceiptBotUsername   string
 	TgReceiptWebhookSecret string
 }
 
@@ -32,19 +33,20 @@ func LoadConfig() *Config {
 	}
 
 	return &Config{
-		ServerPort:   getEnv("SERVER_PORT", "8080"),
-		DBPath:       getEnv("DB_PATH", "finance.db"),
-		UploadsDir:   getEnv("UPLOADS_DIR", "./uploads"),
-		SecretKey:        getEnv("JWT_SECRET", "secret"),
-    RegistrationCode: getEnv("REGISTRATION_CODE", "admin"),
-		RPID:             getEnv("RP_ID", "localhost"),
-		AppURL:           getEnv("APP_URL", "http://localhost:3000"),
-		
-		TgBotToken:              getEnv("TG_BOT_TOKEN", ""),
-		TgChatID:                getEnv("TG_CHAT_ID", ""),
-		TgReceiptBotToken:       getEnv("TG_RECEIPT_BOT_TOKEN", ""),
-		TgReceiptBotUsername:    getEnv("TG_RECEIPT_BOT_USERNAME", ""),
-		TgReceiptWebhookSecret:  getEnv("TG_RECEIPT_WEBHOOK_SECRET", ""),
+		ServerPort:          getEnv("SERVER_PORT", "8080"),
+		DBPath:              getEnv("DB_PATH", "finance.db"),
+		UploadsDir:          getEnv("UPLOADS_DIR", "./uploads"),
+		SecretKey:           getEnv("JWT_SECRET", "secret"),
+		RegistrationCode:    getEnv("REGISTRATION_CODE", "admin"),
+		RPID:                getEnv("RP_ID", "localhost"),
+		AppURL:              getEnv("APP_URL", "http://localhost:3000"),
+		PlatformAdminEmails: getEnv("PLATFORM_ADMIN_EMAILS", ""),
+
+		TgBotToken:             getEnv("TG_BOT_TOKEN", ""),
+		TgChatID:               getEnv("TG_CHAT_ID", ""),
+		TgReceiptBotToken:      getEnv("TG_RECEIPT_BOT_TOKEN", ""),
+		TgReceiptBotUsername:   getEnv("TG_RECEIPT_BOT_USERNAME", ""),
+		TgReceiptWebhookSecret: getEnv("TG_RECEIPT_WEBHOOK_SECRET", ""),
 	}
 }
 

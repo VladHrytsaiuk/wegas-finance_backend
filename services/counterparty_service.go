@@ -113,6 +113,9 @@ func (s *cpService) UpdateCategory(id string, input CpCategoryInput, user *model
 	cat.Name = input.Name
 	cat.Icon = input.Icon
 	cat.Color = input.Color
+	if cat.GlobalTemplateID != nil {
+		cat.GlobalTemplateID = nil
+	}
 	cat.UpdatedAt = time.Now().UnixMilli()
 
 	if err := s.repo.UpdateCategory(cat); err != nil {
@@ -183,6 +186,9 @@ func (s *cpService) Update(id string, input CounterpartyInput, user *models.User
 	cp.CategoryID = input.CategoryID
 	cp.Icon = input.Icon
 	cp.Logo = input.Logo
+	if cp.GlobalTemplateID != nil {
+		cp.GlobalTemplateID = nil
+	}
 	cp.UpdatedAt = time.Now().UnixMilli()
 
 	if err := s.repo.Update(cp); err != nil {

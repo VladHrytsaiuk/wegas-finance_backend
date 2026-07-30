@@ -34,16 +34,17 @@ type AppControllers struct {
 	Monobank         *controllers.MonobankController // <--- Added
 	Asset            *controllers.AssetController
 	// Medical      *controllers.MedicalController
-	Utility     *controllers.UtilityController
-	Goal        *controllers.GoalController        // <--- ДОДАЛИ
-	StorageType *controllers.StorageTypeController // <--- ДОДАЛИ
-	Currency    *controllers.CurrencyController
-	Feedback    *controllers.FeedbackController
-	Shopping    *controllers.ShoppingController
-	Wishlist    *controllers.WishlistController
-	Family      *controllers.FamilyController
-	WS          *controllers.WSController
-	WebAuthn    *controllers.WebAuthnController
+	Utility      *controllers.UtilityController
+	Goal         *controllers.GoalController        // <--- ДОДАЛИ
+	StorageType  *controllers.StorageTypeController // <--- ДОДАЛИ
+	Currency     *controllers.CurrencyController
+	Feedback     *controllers.FeedbackController
+	Shopping     *controllers.ShoppingController
+	Wishlist     *controllers.WishlistController
+	Family       *controllers.FamilyController
+	WS           *controllers.WSController
+	WebAuthn     *controllers.WebAuthnController
+	AdminCatalog *controllers.AdminCatalogController
 }
 
 func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
@@ -82,6 +83,24 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 		protected := api.Group("/")
 		protected.Use(middlewares.AuthMiddleware(cfg.SecretKey))
 		{
+			admin := protected.Group("/admin")
+			admin.Use(middlewares.RequirePlatformAdmin())
+			admin.GET("/status", func(ctx *gin.Context) {
+				ctx.JSON(200, gin.H{"status": "ok"})
+			})
+			admin.GET("/catalog/categories", c.AdminCatalog.GetCategories)
+			admin.POST("/catalog/categories", c.AdminCatalog.CreateCategory)
+			admin.PUT("/catalog/categories/:id", c.AdminCatalog.UpdateCategory)
+			admin.DELETE("/catalog/categories/:id", c.AdminCatalog.ArchiveCategory)
+			admin.GET("/catalog/counterparty-categories", c.AdminCatalog.GetCounterpartyCategories)
+			admin.POST("/catalog/counterparty-categories", c.AdminCatalog.CreateCounterpartyCategory)
+			admin.PUT("/catalog/counterparty-categories/:id", c.AdminCatalog.UpdateCounterpartyCategory)
+			admin.DELETE("/catalog/counterparty-categories/:id", c.AdminCatalog.ArchiveCounterpartyCategory)
+			admin.GET("/catalog/counterparties", c.AdminCatalog.GetCounterparties)
+			admin.POST("/catalog/counterparties", c.AdminCatalog.CreateCounterparty)
+			admin.PUT("/catalog/counterparties/:id", c.AdminCatalog.UpdateCounterparty)
+			admin.DELETE("/catalog/counterparties/:id", c.AdminCatalog.ArchiveCounterparty)
+
 			// WebAuthn Protected Endpoints
 			protected.POST("/webauthn/register/options", c.WebAuthn.RegisterOptions)
 			protected.POST("/webauthn/register/verify", c.WebAuthn.RegisterVerify)
