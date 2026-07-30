@@ -5,15 +5,19 @@ import (
 	"time"
 
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
+	"github.com/VladHrytsaiuk/wegas-finance/backend/services"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
-type AdminCatalogController struct{ db *gorm.DB }
+type AdminCatalogController struct {
+	db           *gorm.DB
+	auditService services.AuditService
+}
 
-func NewAdminCatalogController(db *gorm.DB) *AdminCatalogController {
-	return &AdminCatalogController{db: db}
+func NewAdminCatalogController(db *gorm.DB, auditService services.AuditService) *AdminCatalogController {
+	return &AdminCatalogController{db: db, auditService: auditService}
 }
 
 type adminCategoryInput struct {
@@ -53,6 +57,8 @@ func (h *AdminCatalogController) CreateCategory(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		return
 	}
+	adminID := c.GetString("userID")
+	h.auditService.LogAction(adminID, "create_category", "global_category", category.ID, in, c.ClientIP())
 	c.JSON(http.StatusCreated, category)
 }
 
@@ -77,6 +83,8 @@ func (h *AdminCatalogController) UpdateCategory(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	adminID := c.GetString("userID")
+	h.auditService.LogAction(adminID, "update_category", "global_category", category.ID, in, c.ClientIP())
 	c.JSON(http.StatusOK, category)
 }
 
@@ -100,6 +108,8 @@ func (h *AdminCatalogController) ArchiveCategory(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	adminID := c.GetString("userID")
+	h.auditService.LogAction(adminID, "archive_category", "global_category", c.Param("id"), nil, c.ClientIP())
 	c.Status(http.StatusNoContent)
 }
 
@@ -131,6 +141,8 @@ func (h *AdminCatalogController) CreateCounterpartyCategory(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		return
 	}
+	adminID := c.GetString("userID")
+	h.auditService.LogAction(adminID, "create_counterparty_category", "global_counterparty_category", value.ID, in, c.ClientIP())
 	c.JSON(http.StatusCreated, value)
 }
 
@@ -157,6 +169,8 @@ func (h *AdminCatalogController) UpdateCounterpartyCategory(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	adminID := c.GetString("userID")
+	h.auditService.LogAction(adminID, "update_counterparty_category", "global_counterparty_category", category.ID, in, c.ClientIP())
 	c.JSON(http.StatusOK, category)
 }
 
@@ -165,6 +179,8 @@ func (h *AdminCatalogController) ArchiveCounterpartyCategory(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	adminID := c.GetString("userID")
+	h.auditService.LogAction(adminID, "archive_counterparty_category", "global_counterparty_category", c.Param("id"), nil, c.ClientIP())
 	c.Status(http.StatusNoContent)
 }
 
@@ -196,6 +212,8 @@ func (h *AdminCatalogController) CreateCounterparty(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		return
 	}
+	adminID := c.GetString("userID")
+	h.auditService.LogAction(adminID, "create_counterparty", "global_counterparty", value.ID, in, c.ClientIP())
 	c.JSON(http.StatusCreated, value)
 }
 
@@ -230,6 +248,8 @@ func (h *AdminCatalogController) UpdateCounterparty(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	adminID := c.GetString("userID")
+	h.auditService.LogAction(adminID, "update_counterparty", "global_counterparty", counterparty.ID, in, c.ClientIP())
 	c.JSON(http.StatusOK, counterparty)
 }
 
@@ -238,5 +258,7 @@ func (h *AdminCatalogController) ArchiveCounterparty(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	adminID := c.GetString("userID")
+	h.auditService.LogAction(adminID, "archive_counterparty", "global_counterparty", c.Param("id"), nil, c.ClientIP())
 	c.Status(http.StatusNoContent)
 }

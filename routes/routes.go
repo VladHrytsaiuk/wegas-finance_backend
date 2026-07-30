@@ -35,16 +35,19 @@ type AppControllers struct {
 	Asset            *controllers.AssetController
 	// Medical      *controllers.MedicalController
 	Utility      *controllers.UtilityController
-	Goal         *controllers.GoalController        // <--- ДОДАЛИ
-	StorageType  *controllers.StorageTypeController // <--- ДОДАЛИ
+	Goal         *controllers.GoalController
+	StorageType  *controllers.StorageTypeController
 	Currency     *controllers.CurrencyController
 	Feedback     *controllers.FeedbackController
-	Shopping     *controllers.ShoppingController
-	Wishlist     *controllers.WishlistController
-	Family       *controllers.FamilyController
-	WS           *controllers.WSController
-	WebAuthn     *controllers.WebAuthnController
-	AdminCatalog *controllers.AdminCatalogController
+	Shopping      *controllers.ShoppingController
+	Wishlist      *controllers.WishlistController
+	Family        *controllers.FamilyController
+	WS            *controllers.WSController
+	WebAuthn      *controllers.WebAuthnController
+	AdminCatalog  *controllers.AdminCatalogController
+	AdminUsers    *controllers.AdminUsersController
+	AdminAudit    *controllers.AdminAuditController
+	AdminOverview *controllers.AdminOverviewController
 }
 
 func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
@@ -61,9 +64,10 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 		// === PUBLIC ===
 		api.GET("/system/info", func(ctx *gin.Context) {
 			ctx.JSON(200, gin.H{
-				"rp_id":   cfg.RPID,
-				"app_url": cfg.AppURL,
-				"status":  "running",
+				"rp_id":            cfg.RPID,
+				"app_url":          cfg.AppURL,
+				"status":           "running",
+				"maintenance_mode": middlewares.IsMaintenanceMode(),
 			})
 		})
 		api.POST("/users", c.Auth.Register)
@@ -82,6 +86,7 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 		// === PROTECTED ===
 		protected := api.Group("/")
 		protected.Use(middlewares.AuthMiddleware(cfg.SecretKey))
+		protected.Use(middlewares.MaintenanceMiddleware())
 		{
 			admin := protected.Group("/admin")
 			admin.Use(middlewares.RequirePlatformAdmin())
@@ -100,6 +105,20 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 			admin.POST("/catalog/counterparties", c.AdminCatalog.CreateCounterparty)
 			admin.PUT("/catalog/counterparties/:id", c.AdminCatalog.UpdateCounterparty)
 			admin.DELETE("/catalog/counterparties/:id", c.AdminCatalog.ArchiveCounterparty)
+
+			// --- ADMIN USERS ---
+			admin.GET("/users", c.AdminUsers.GetUsers)
+			admin.POST("/users/:id/block", c.AdminUsers.ToggleBlock)
+			admin.POST("/users/:id/logout", c.AdminUsers.ForceLogout)
+			admin.POST("/users/:id/role", c.AdminUsers.SetRole)
+
+			// --- ADMIN AUDIT & SETTINGS ---
+			admin.GET("/audit", c.AdminAudit.GetLogs)
+			admin.GET("/settings", c.AdminAudit.GetSettings)
+
+			// --- ADMIN OVERVIEW ---
+			admin.GET("/overview/stats", c.AdminOverview.GetStats)
+			admin.POST("/maintenance", c.AdminOverview.ToggleMaintenance)
 
 			// WebAuthn Protected Endpoints
 			protected.POST("/webauthn/register/options", c.WebAuthn.RegisterOptions)

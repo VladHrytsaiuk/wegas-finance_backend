@@ -69,6 +69,18 @@ func AuthMiddleware(secretKey string) gin.HandlerFunc {
 			return
 		}
 
+		if !user.IsActive {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "User account is blocked"})
+			return
+		}
+
+		if sessionVersion, ok := claims["session_version"].(float64); ok {
+			if int(sessionVersion) != user.SessionVersion {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Session expired (logged out)"})
+				return
+			}
+		}
+
 		c.Set("user", &user)
 		c.Set("userID", user.ID)
 		c.Set("familyID", user.FamilyID)

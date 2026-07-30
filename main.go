@@ -170,6 +170,8 @@ func startApp() {
 		&models.MedicalFile{},
 		&models.WebAuthnCredential{},
 		&models.SchemaMigration{},
+		&models.AuditLog{},
+		&models.SystemSetting{},
 	)
 	if err != nil {
 		log.Fatal("❌ Migration error:", err)
@@ -256,6 +258,9 @@ func startApp() {
 	wishlistService := services.NewWishlistService(wishlistRepo) // <--- 3. ДОДАНО SERVICE
 	familyJoinService := services.NewFamilyJoinService(familyJoinRepo, userRepo, wsHub, db)
 
+	adminService := services.NewAdminService(db)
+	auditService := services.NewAuditService(db)
+
 	waService, err := services.NewWebAuthnService(cfg.RPID, cfg.AppURL, waRepo, userRepo)
 	if err != nil {
 		log.Fatal("❌ WebAuthn init error:", err)
@@ -276,7 +281,7 @@ func startApp() {
 		Import: controllers.NewImportController(importService), ReceiptIngestion: controllers.NewReceiptIngestionController(receiptIngestionService), Settings: controllers.NewSettingsController(userRepo),
 		Monobank: controllers.NewMonobankController(monobankService), Asset: controllers.NewAssetController(assetService),
 		Utility: controllers.NewUtilityController(utilityService), Goal: controllers.NewGoalController(goalService),
-		AdminCatalog: controllers.NewAdminCatalogController(db),
+		AdminCatalog: controllers.NewAdminCatalogController(db, auditService),
 		StorageType:  controllers.NewStorageTypeController(storageTypeService), Currency: controllers.NewCurrencyController(currencyService),
 		Feedback: controllers.NewFeedbackController(feedbackService),
 		Shopping: controllers.NewShoppingController(shoppingService),
@@ -284,6 +289,9 @@ func startApp() {
 		Family:   controllers.NewFamilyController(familyJoinService),
 		WS:       controllers.NewWSController(wsHub),
 		WebAuthn: controllers.NewWebAuthnController(waService, jwtService, userRepo),
+		AdminUsers: controllers.NewAdminUsersController(adminService, auditService),
+		AdminAudit: controllers.NewAdminAuditController(adminService, auditService),
+		AdminOverview: controllers.NewAdminOverviewController(db, auditService),
 	}
 
 	r := gin.Default()
