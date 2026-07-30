@@ -14,39 +14,48 @@ import (
 
 // AppControllers — контейнер для всіх контролерів
 type AppControllers struct {
-	Auth         *controllers.AuthController
-	User         *controllers.UserController
-	Account      *controllers.AccountController
-	Category     *controllers.CategoryController
-	Counterparty *controllers.CounterpartyController
-	Tag          *controllers.TagController
-	Transaction  *controllers.TransactionController
-	Dashboard    *controllers.DashboardController
-	Role         *controllers.RoleController
-	Settings     *controllers.SettingsController
-	Export       *controllers.ExportController
-	Import       *controllers.ImportController     // <--- Added
-	Monobank     *controllers.MonobankController   // <--- Added
-	Asset        *controllers.AssetController
+	Auth             *controllers.AuthController
+	User             *controllers.UserController
+	Account          *controllers.AccountController
+	Category         *controllers.CategoryController
+	Counterparty     *controllers.CounterpartyController
+	Tag              *controllers.TagController
+	Transaction      *controllers.TransactionController
+	Inbox            *controllers.InboxController
+	Dashboard        *controllers.DashboardController
+	Role             *controllers.RoleController
+	Settings         *controllers.SettingsController
+	Export           *controllers.ExportController
+	Import           *controllers.ImportController // <--- Added
+	ReceiptIngestion *controllers.ReceiptIngestionController
+	TelegramLink     *controllers.TelegramLinkController
+	TelegramBot      *controllers.TelegramBotController
+	TelegramWebhook  *controllers.TelegramWebhookController
+	Monobank         *controllers.MonobankController // <--- Added
+	Asset            *controllers.AssetController
 	// Medical      *controllers.MedicalController
 	Utility      *controllers.UtilityController
-	Goal         *controllers.GoalController        // <--- ДОДАЛИ
-  StorageType  *controllers.StorageTypeController // <--- ДОДАЛИ
-	Currency 	   *controllers.CurrencyController
+	Goal         *controllers.GoalController
+	StorageType  *controllers.StorageTypeController
+	Currency     *controllers.CurrencyController
 	Feedback     *controllers.FeedbackController
-	Shopping     *controllers.ShoppingController
-	Wishlist     *controllers.WishlistController
-	Family       *controllers.FamilyController
-	WS           *controllers.WSController
-	WebAuthn     *controllers.WebAuthnController
+	Shopping      *controllers.ShoppingController
+	Wishlist      *controllers.WishlistController
+	Family        *controllers.FamilyController
+	WS            *controllers.WSController
+	WebAuthn      *controllers.WebAuthnController
+	AdminCatalog  *controllers.AdminCatalogController
+	AdminUsers    *controllers.AdminUsersController
+	AdminAudit    *controllers.AdminAuditController
+	AdminOverview *controllers.AdminOverviewController
 }
 
 func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 
 	_ = os.MkdirAll(cfg.UploadsDir, 0755)
 
-  r.StaticFS("/uploads", gin.Dir(cfg.UploadsDir, true))
-	
+	r.StaticFS("/uploads", gin.Dir(cfg.UploadsDir, true))
+
 	// Swagger UI
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
@@ -55,9 +64,10 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 		// === PUBLIC ===
 		api.GET("/system/info", func(ctx *gin.Context) {
 			ctx.JSON(200, gin.H{
-				"rp_id":   cfg.RPID,
-				"app_url": cfg.AppURL,
-				"status":  "running",
+				"rp_id":            cfg.RPID,
+				"app_url":          cfg.AppURL,
+				"status":           "running",
+				"maintenance_mode": middlewares.IsMaintenanceMode(),
 			})
 		})
 		api.POST("/users", c.Auth.Register)
@@ -65,6 +75,8 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 		api.POST("/login/pin", c.Auth.LoginWithPIN)
 		api.POST("/feedback", c.Feedback.Submit)
 		api.POST("/monobank/webhook", c.Monobank.Webhook)
+		api.POST("/telegram/link/complete", c.TelegramLink.CompleteLink)
+		api.POST("/telegram/webhook", c.TelegramBot.Webhook)
 
 		// WebAuthn Public Endpoints
 		api.POST("/webauthn/login/options", c.WebAuthn.LoginOptions)
@@ -74,7 +86,40 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 		// === PROTECTED ===
 		protected := api.Group("/")
 		protected.Use(middlewares.AuthMiddleware(cfg.SecretKey))
+		protected.Use(middlewares.MaintenanceMiddleware())
 		{
+			admin := protected.Group("/admin")
+			admin.Use(middlewares.RequirePlatformAdmin())
+			admin.GET("/status", func(ctx *gin.Context) {
+				ctx.JSON(200, gin.H{"status": "ok"})
+			})
+			admin.GET("/catalog/categories", c.AdminCatalog.GetCategories)
+			admin.POST("/catalog/categories", c.AdminCatalog.CreateCategory)
+			admin.PUT("/catalog/categories/:id", c.AdminCatalog.UpdateCategory)
+			admin.DELETE("/catalog/categories/:id", c.AdminCatalog.ArchiveCategory)
+			admin.GET("/catalog/counterparty-categories", c.AdminCatalog.GetCounterpartyCategories)
+			admin.POST("/catalog/counterparty-categories", c.AdminCatalog.CreateCounterpartyCategory)
+			admin.PUT("/catalog/counterparty-categories/:id", c.AdminCatalog.UpdateCounterpartyCategory)
+			admin.DELETE("/catalog/counterparty-categories/:id", c.AdminCatalog.ArchiveCounterpartyCategory)
+			admin.GET("/catalog/counterparties", c.AdminCatalog.GetCounterparties)
+			admin.POST("/catalog/counterparties", c.AdminCatalog.CreateCounterparty)
+			admin.PUT("/catalog/counterparties/:id", c.AdminCatalog.UpdateCounterparty)
+			admin.DELETE("/catalog/counterparties/:id", c.AdminCatalog.ArchiveCounterparty)
+
+			// --- ADMIN USERS ---
+			admin.GET("/users", c.AdminUsers.GetUsers)
+			admin.POST("/users/:id/block", c.AdminUsers.ToggleBlock)
+			admin.POST("/users/:id/logout", c.AdminUsers.ForceLogout)
+			admin.POST("/users/:id/role", c.AdminUsers.SetRole)
+
+			// --- ADMIN AUDIT & SETTINGS ---
+			admin.GET("/audit", c.AdminAudit.GetLogs)
+			admin.GET("/settings", c.AdminAudit.GetSettings)
+
+			// --- ADMIN OVERVIEW ---
+			admin.GET("/overview/stats", c.AdminOverview.GetStats)
+			admin.POST("/maintenance", c.AdminOverview.ToggleMaintenance)
+
 			// WebAuthn Protected Endpoints
 			protected.POST("/webauthn/register/options", c.WebAuthn.RegisterOptions)
 			protected.POST("/webauthn/register/verify", c.WebAuthn.RegisterVerify)
@@ -91,6 +136,14 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 			protected.GET("/export/transactions", c.Export.ExportTransactions)
 			protected.GET("/export/backup", c.Export.ExportBackup)
 			protected.POST("/import/upload", c.Import.UploadStatement)
+			protected.POST("/receipt-ingestion/xml", c.ReceiptIngestion.IngestXML)
+			protected.POST("/receipt-ingestion/url", c.ReceiptIngestion.IngestURL)
+			protected.GET("/integrations/telegram", c.TelegramLink.GetStatus)
+			protected.POST("/integrations/telegram/link-token", c.TelegramLink.CreateLinkToken)
+			protected.DELETE("/integrations/telegram/link", c.TelegramLink.RevokeLink)
+			protected.GET("/integrations/telegram/webhook", c.TelegramWebhook.GetStatus)
+			protected.POST("/integrations/telegram/webhook/sync", c.TelegramWebhook.SyncWebhook)
+			protected.DELETE("/integrations/telegram/webhook", c.TelegramWebhook.DeleteWebhook)
 
 			// --- PROFILE & USERS ---
 			protected.GET("/users/me", c.User.GetMe)
@@ -115,6 +168,7 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 			// --- ACCOUNTS ---
 			protected.POST("/accounts", c.Account.Create)
 			protected.GET("/accounts", c.Account.GetAll)
+			protected.PUT("/accounts/mobile-order", c.Account.UpdateMobileOrder)
 			protected.GET("/accounts/:id", c.Account.GetOne)
 			protected.PUT("/accounts/:id", c.Account.Update)
 			protected.DELETE("/accounts/:id", c.Account.Delete)
@@ -135,24 +189,36 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 			protected.POST("/transactions/batch", c.Transaction.BatchCreate)
 			protected.DELETE("/transactions/photos/:id", c.Transaction.DeletePhoto)
 			protected.GET("/transactions/predict", c.Transaction.PredictCategory)
-			
+			protected.GET("/transactions/:id/receipt-sources", c.Transaction.GetLinkedReceipts)
+			protected.POST("/transactions/:id/receipt-sources/unlink", c.Transaction.UnlinkReceiptSource)
+
 			// Receipts
 			protected.POST("/transactions/:id/receipt", c.Transaction.UploadReceipt)
 			protected.DELETE("/transactions/:id/receipt", c.Transaction.DeleteReceipt)
 
+			// --- INBOX ---
+			protected.POST("/inbox", c.Inbox.Create)
+			protected.POST("/inbox/photo", c.Inbox.CreatePhoto)
+			protected.GET("/inbox", c.Inbox.GetAll)
+			protected.GET("/inbox/:id/account-candidates", c.Inbox.GetAccountCandidates)
+			protected.GET("/inbox/:id/transaction-candidates", c.Inbox.GetTransactionCandidates)
+			protected.GET("/inbox/:id", c.Inbox.GetOne)
+			protected.PATCH("/inbox/:id/account", c.Inbox.SelectAccount)
+			protected.POST("/inbox/:id/link", c.Inbox.Link)
+			protected.POST("/inbox/:id/unlink", c.Inbox.Unlink)
+
 			// --- MONOBANK (Виправлено конфлікт шляхів) ---
 			protected.POST("/monobank/connect", c.Monobank.Connect)
 			protected.POST("/monobank/settings", c.Monobank.SaveSettings) // Зберегти налаштування
-      protected.GET("/monobank/settings", c.Monobank.GetSettings) 
-      
-      // 2. Refresh (API Request) - викликається по кнопці "Налаштувати"
-      protected.POST("/monobank/refresh", c.Monobank.RefreshClientInfo)
+			protected.GET("/monobank/settings", c.Monobank.GetSettings)
+
+			// 2. Refresh (API Request) - викликається по кнопці "Налаштувати"
+			protected.POST("/monobank/refresh", c.Monobank.RefreshClientInfo)
 			protected.POST("/monobank/sync-confirm", c.Monobank.ConfirmSync)
 			protected.POST("/monobank/disconnect", c.Monobank.Disconnect)
 			protected.GET("/monobank/status", c.Monobank.GetStatus) // <--- Додай
 			protected.POST("/monobank/sync", c.Monobank.ForceSync)
 			protected.POST("/monobank/force-resync", c.Monobank.ForceResyncCounterparties)
-
 
 			// --- COUNTERPARTIES ---
 			protected.POST("/counterparties", c.Counterparty.Create)
@@ -177,7 +243,7 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 			protected.DELETE("/roles/:id", c.Role.Delete)
 
 			// --- GENERAL SETTINGS ---
-			protected.GET("/settings", c.Settings.GetSettingsHTTP)   // Загальні налаштування
+			protected.GET("/settings", c.Settings.GetSettingsHTTP) // Загальні налаштування
 			protected.POST("/settings", c.Settings.SaveSettingsHTTP)
 
 			// --- ASSETS ---
@@ -190,7 +256,7 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 			protected.PATCH("/assets/:id/mileage", c.Asset.UpdateMileage)
 			protected.DELETE("/assets/:id/photo", c.Asset.RemovePhoto)
 			protected.POST("/assets/:id/documents", c.Asset.UploadDocument)
-      protected.DELETE("/assets/:id/documents/:doc_id", c.Asset.RemoveDocument)
+			protected.DELETE("/assets/:id/documents/:doc_id", c.Asset.RemoveDocument)
 
 			// --- UTILITY ---
 			protected.GET("/utility/meters", c.Utility.GetMeters)
@@ -208,44 +274,41 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 
 			protected.GET("/utility/stats/global", c.Utility.GetGlobalStats)
 			protected.GET("/utility/stats/meter/:id", c.Utility.GetMeterStats)
-			
-
 
 			// --- GOALS (Фінансові цілі) ---
-      protected.POST("/goals", c.Goal.Create)
-      protected.GET("/goals", c.Goal.GetAll)
-      protected.GET("/goals/:id", c.Goal.GetOne)
-      protected.PUT("/goals/:id", c.Goal.Update)
-      protected.DELETE("/goals/:id", c.Goal.Delete)
+			protected.POST("/goals", c.Goal.Create)
+			protected.GET("/goals", c.Goal.GetAll)
+			protected.GET("/goals/:id", c.Goal.GetOne)
+			protected.PUT("/goals/:id", c.Goal.Update)
+			protected.DELETE("/goals/:id", c.Goal.Delete)
 			protected.POST("/goals/:id/photo", c.Goal.UploadPhoto)
-      
-      // Спеціальний роут для відв'язування рахунку від цілі (або це можна робити через PUT goals)
-      protected.POST("/goals/:id/link-account", c.Goal.LinkAccount)
-      protected.POST("/goals/:id/unlink-account", c.Goal.UnlinkAccount)
 
-      // --- STORAGE TYPES (Типи скарбничок) ---
-      protected.GET("/storage-types", c.StorageType.GetAll) // Отримати і системні, і свої
-      protected.POST("/storage-types", c.StorageType.Create)
-      protected.DELETE("/storage-types/:id", c.StorageType.Delete)
+			// Спеціальний роут для відв'язування рахунку від цілі (або це можна робити через PUT goals)
+			protected.POST("/goals/:id/link-account", c.Goal.LinkAccount)
+			protected.POST("/goals/:id/unlink-account", c.Goal.UnlinkAccount)
+
+			// --- STORAGE TYPES (Типи скарбничок) ---
+			protected.GET("/storage-types", c.StorageType.GetAll) // Отримати і системні, і свої
+			protected.POST("/storage-types", c.StorageType.Create)
+			protected.DELETE("/storage-types/:id", c.StorageType.Delete)
 
 			// --- СПИСКИ (НОТАТКИ) ---
-      protected.GET("/shopping-lists", c.Shopping.GetLists)
-      protected.POST("/shopping-lists", c.Shopping.CreateList)
-      protected.PUT("/shopping-lists/:id", c.Shopping.UpdateList)
-      protected.DELETE("/shopping-lists/:id", c.Shopping.DeleteList)
+			protected.GET("/shopping-lists", c.Shopping.GetLists)
+			protected.POST("/shopping-lists", c.Shopping.CreateList)
+			protected.PUT("/shopping-lists/:id", c.Shopping.UpdateList)
+			protected.DELETE("/shopping-lists/:id", c.Shopping.DeleteList)
 
-      // --- ЕЛЕМЕНТИ ВСЕРЕДИНІ НОТАТКИ ---
-      protected.POST("/shopping-lists/:id/items", c.Shopping.AddItem)
-      protected.PUT("/shopping-items/:id", c.Shopping.UpdateItem)
-      protected.DELETE("/shopping-items/:id", c.Shopping.DeleteItem)
-      protected.DELETE("/shopping-lists/:id/completed", c.Shopping.ClearCompletedInList)
+			// --- ЕЛЕМЕНТИ ВСЕРЕДИНІ НОТАТКИ ---
+			protected.POST("/shopping-lists/:id/items", c.Shopping.AddItem)
+			protected.PUT("/shopping-items/:id", c.Shopping.UpdateItem)
+			protected.DELETE("/shopping-items/:id", c.Shopping.DeleteItem)
+			protected.DELETE("/shopping-lists/:id/completed", c.Shopping.ClearCompletedInList)
 
 			// --- WISHLIST ---
 			protected.GET("/wishlist-groups", c.Wishlist.GetGroups)
 			protected.POST("/wishlist-groups", c.Wishlist.CreateGroup)
 			protected.PUT("/wishlist-groups/:id", c.Wishlist.UpdateGroup)
 			protected.DELETE("/wishlist-groups/:id", c.Wishlist.DeleteGroup)
-			
 
 			protected.GET("/wishlist", c.Wishlist.GetAll)
 			protected.POST("/wishlist", c.Wishlist.Create)

@@ -1,0 +1,196 @@
+package services
+
+import (
+	"encoding/json"
+	"strings"
+
+	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
+	"github.com/VladHrytsaiuk/wegas-finance/backend/services/parsers"
+)
+
+func (s *receiptIngestionService) parseReceiptXMLWithMerchantFallback(raw []byte, sourceURL string) (*parsers.ParsedReceipt, error) {
+	receipt, err := s.xmlParser.Parse(raw)
+	if err != nil {
+		return nil, err
+	}
+	if receipt.Merchant == "" && strings.Contains(strings.ToLower(sourceURL), "silpo") {
+		receipt.Merchant = "Сільпо"
+	}
+	return receipt, nil
+}
+
+func (s *receiptIngestionService) createInboxFromParsedReceipt(
+	receipt *parsers.ParsedReceipt,
+	origin string,
+	sourceURL string,
+	user *models.User,
+) (*models.InboxEntry, error) {
+	if existing, err := s.findExistingInboxEntry(receipt, user); err == nil && existing != nil {
+		return existing, nil
+	}
+
+	preference, err := receiptPreferenceForMerchant(s.db, user, receipt.Merchant)
+	if err != nil {
+		return nil, err
+	}
+
+	var counterpartyID *string
+	var categoryID *string
+	if preference != nil {
+		counterpartyID = preference.CounterpartyID
+		categoryID = preference.CategoryID
+	}
+	if counterpartyID == nil {
+		counterpartyID = s.findCounterpartyID(user.FamilyID, receipt.Merchant)
+	}
+
+	var items []InboxCreateItemInput
+	for _, item := range receipt.Items {
+		items = append(items, InboxCreateItemInput{
+			Name:         item.Name,
+			Quantity:     item.Quantity,
+			PricePerUnit: item.PricePerUnit,
+			TotalAmount:  item.TotalAmount,
+			CategoryID:   receiptItemCategoryForName(s.db, user, receipt.Merchant, item.Name),
+		})
+	}
+
+	parsedPayloadBytes, _ := json.Marshal(receipt)
+	var receiptDate *int64
+	if !receipt.ReceiptDate.IsZero() {
+		ts := receipt.ReceiptDate.UnixMilli()
+		receiptDate = &ts
+	}
+
+	status := models.InboxEntryStatusNeedsAccount
+	if len(items) == 0 {
+		status = models.InboxEntryStatusNeedsReview
+	}
+	reviewRequired := user.RequireReceiptReview
+	paymentProvider, paymentMask := extractPrimaryPayment(receipt)
+
+	return s.inbox.Create(InboxCreateInput{
+		Status:          status,
+		Reason:          "parsed_receipt_pending_account",
+		ReviewRequired:  &reviewRequired,
+		SourceType:      receipt.SourceType,
+		Origin:          origin,
+		SourceURL:       sourceURL,
+		RawPayload:      receipt.RawSource,
+		ParsedPayload:   string(parsedPayloadBytes),
+		Merchant:        receipt.Merchant,
+		ReceiptNumber:   receipt.ReceiptNumber,
+		ReceiptDate:     receiptDate,
+		Subtotal:        int64PtrIfNonZero(receipt.Subtotal),
+		DiscountTotal:   int64PtrIfNonZero(receipt.DiscountTotal),
+		Total:           int64PtrIfNonZero(receipt.Total),
+		Currency:        fallbackCurrency(receipt.Currency),
+		PaymentProvider: paymentProvider,
+		PaymentMask:     paymentMask,
+		OccurredAt:      receiptDate,
+		Note:            buildReceiptNote(receipt),
+		CounterpartyID:  counterpartyID,
+		CategoryID:      categoryID,
+		Items:           items,
+	}, user)
+}
+
+func (s *receiptIngestionService) findExistingInboxEntry(
+	receipt *parsers.ParsedReceipt,
+	user *models.User,
+) (*models.InboxEntry, error) {
+	rawPayload := strings.TrimSpace(receipt.RawSource)
+
+	var entry models.InboxEntry
+	query := s.db.
+		Model(&models.InboxEntry{}).
+		Joins("JOIN receipt_sources ON receipt_sources.id = inbox_entries.receipt_source_id").
+		Preload("ReceiptSource").
+		Preload("ReceiptSource.Items").
+		Preload("ReceiptSource.Counterparty").
+		Preload("ReceiptSource.Category").
+		Preload("SelectedAccount").
+		Preload("MatchedTransaction").
+		Where("inbox_entries.family_id = ? AND inbox_entries.user_id = ? AND inbox_entries.deleted_at IS NULL", user.FamilyID, user.ID).
+		Where("receipt_sources.deleted_at IS NULL")
+
+	if rawPayload != "" {
+		query = query.Where("receipt_sources.raw_payload = ?", rawPayload)
+	} else {
+		query = query.
+			Where("receipt_sources.source_type = ?", receipt.SourceType).
+			Where("receipt_sources.merchant = ?", receipt.Merchant).
+			Where("receipt_sources.receipt_number = ?", receipt.ReceiptNumber).
+			Where("receipt_sources.total = ?", receipt.Total)
+
+		if !receipt.ReceiptDate.IsZero() {
+			ts := receipt.ReceiptDate.UnixMilli()
+			query = query.Where("receipt_sources.receipt_date = ?", ts)
+		}
+	}
+
+	err := query.Order("inbox_entries.created_at DESC").First(&entry).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &entry, nil
+}
+
+func (s *receiptIngestionService) findCounterpartyID(familyID string, merchant string) *string {
+	normalized := receiptMerchantKey(merchant)
+	if normalized == "" {
+		return nil
+	}
+
+	var counterparties []models.Counterparty
+	if err := s.db.Where("family_id = ? AND deleted_at IS NULL", familyID).Find(&counterparties).Error; err != nil {
+		return nil
+	}
+	for _, cp := range counterparties {
+		if receiptMerchantKey(cp.Name) == normalized {
+			return &cp.ID
+		}
+	}
+	return nil
+}
+
+func int64PtrIfNonZero(v int64) *int64 {
+	if v == 0 {
+		return nil
+	}
+	value := v
+	return &value
+}
+
+func fallbackCurrency(currency string) string {
+	if strings.TrimSpace(currency) == "" {
+		return "UAH"
+	}
+	return currency
+}
+
+func buildReceiptNote(receipt *parsers.ParsedReceipt) string {
+	var parts []string
+	if receipt.Merchant != "" {
+		parts = append(parts, receipt.Merchant)
+	}
+	if receipt.ReceiptNumber != "" {
+		parts = append(parts, "receipt #"+receipt.ReceiptNumber)
+	}
+	if len(receipt.Payments) > 0 && receipt.Payments[0].Provider != "" {
+		parts = append(parts, receipt.Payments[0].Provider)
+	}
+	if len(receipt.Payments) > 0 && receipt.Payments[0].Mask != "" {
+		parts = append(parts, receipt.Payments[0].Mask)
+	}
+	return strings.Join(parts, " | ")
+}
+
+func extractPrimaryPayment(receipt *parsers.ParsedReceipt) (string, string) {
+	if receipt == nil || len(receipt.Payments) == 0 {
+		return "", ""
+	}
+
+	return strings.TrimSpace(receipt.Payments[0].Provider), strings.TrimSpace(receipt.Payments[0].Mask)
+}

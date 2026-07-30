@@ -5,6 +5,7 @@ import (
 	"mime/multipart"
 
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
+	"github.com/VladHrytsaiuk/wegas-finance/backend/pkg/telegram"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/repositories"
 	"github.com/stretchr/testify/mock"
 	"gorm.io/gorm"
@@ -46,6 +47,11 @@ func (m *MockAccountService) Update(id string, input CreateAccountInput, user *m
 
 func (m *MockAccountService) Delete(id string, user *models.User) error {
 	args := m.Called(id, user)
+	return args.Error(0)
+}
+
+func (m *MockAccountService) UpdateMobileOrder(accountIDs []string, user *models.User) error {
+	args := m.Called(accountIDs, user)
 	return args.Error(0)
 }
 
@@ -385,6 +391,11 @@ func (m *MockTransactionService) GetByID(id string, user *models.User) (*models.
 	return args.Get(0).(*models.Transaction), args.Error(1)
 }
 
+func (m *MockTransactionService) GetLinkedReceipts(id string, user *models.User) ([]models.ReceiptSource, error) {
+	args := m.Called(id, user)
+	return args.Get(0).([]models.ReceiptSource), args.Error(1)
+}
+
 func (m *MockTransactionService) Update(id string, input CreateTransactionInput, user *models.User) error {
 	args := m.Called(id, input, user)
 	return args.Error(0)
@@ -392,6 +403,11 @@ func (m *MockTransactionService) Update(id string, input CreateTransactionInput,
 
 func (m *MockTransactionService) Delete(id string, user *models.User) error {
 	args := m.Called(id, user)
+	return args.Error(0)
+}
+
+func (m *MockTransactionService) UnlinkReceiptSource(txID string, receiptSourceID string, user *models.User) error {
+	args := m.Called(txID, receiptSourceID, user)
 	return args.Error(0)
 }
 
@@ -418,6 +434,192 @@ func (m *MockTransactionService) BatchCreate(inputs []CreateTransactionInput, us
 func (m *MockTransactionService) PredictCategory(itemName string, user *models.User) (string, error) {
 	args := m.Called(itemName, user)
 	return args.String(0), args.Error(1)
+}
+
+// MockInboxService
+type MockInboxService struct {
+	mock.Mock
+}
+
+func (m *MockInboxService) Create(input InboxCreateInput, user *models.User) (*models.InboxEntry, error) {
+	args := m.Called(input, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.InboxEntry), args.Error(1)
+}
+
+func (m *MockInboxService) CreatePhoto(input InboxCreateInput, user *models.User) (*models.InboxEntry, error) {
+	args := m.Called(input, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.InboxEntry), args.Error(1)
+}
+
+func (m *MockInboxService) GetAll(filter InboxListFilter, user *models.User) ([]models.InboxEntry, int64, error) {
+	args := m.Called(filter, user)
+	return args.Get(0).([]models.InboxEntry), args.Get(1).(int64), args.Error(2)
+}
+
+func (m *MockInboxService) GetByID(id string, user *models.User) (*models.InboxEntry, error) {
+	args := m.Called(id, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.InboxEntry), args.Error(1)
+}
+
+func (m *MockInboxService) FindAccountCandidates(id string, user *models.User) ([]InboxAccountCandidate, error) {
+	args := m.Called(id, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]InboxAccountCandidate), args.Error(1)
+}
+
+func (m *MockInboxService) FindTransactionCandidates(id string, user *models.User) ([]InboxTransactionCandidate, error) {
+	args := m.Called(id, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]InboxTransactionCandidate), args.Error(1)
+}
+
+func (m *MockInboxService) TryAutoLink(id string, user *models.User) (*models.InboxEntry, bool, error) {
+	args := m.Called(id, user)
+	if args.Get(0) == nil {
+		return nil, args.Bool(1), args.Error(2)
+	}
+	return args.Get(0).(*models.InboxEntry), args.Bool(1), args.Error(2)
+}
+
+func (m *MockInboxService) AutoLinkForAccount(accountID string, user *models.User) (int, error) {
+	args := m.Called(accountID, user)
+	return args.Int(0), args.Error(1)
+}
+
+func (m *MockInboxService) SelectAccount(id string, accountID string, user *models.User) (*models.InboxEntry, error) {
+	args := m.Called(id, accountID, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.InboxEntry), args.Error(1)
+}
+
+func (m *MockInboxService) Link(id string, transactionID string, applyItems bool, learnFromTransaction bool, user *models.User) (*models.InboxEntry, error) {
+	args := m.Called(id, transactionID, applyItems, learnFromTransaction, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.InboxEntry), args.Error(1)
+}
+
+func (m *MockInboxService) Unlink(id string, user *models.User) (*models.InboxEntry, error) {
+	args := m.Called(id, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.InboxEntry), args.Error(1)
+}
+
+// MockReceiptIngestionService
+type MockReceiptIngestionService struct {
+	mock.Mock
+}
+
+func (m *MockReceiptIngestionService) IngestXML(file *multipart.FileHeader, user *models.User) (*models.InboxEntry, error) {
+	args := m.Called(file, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.InboxEntry), args.Error(1)
+}
+
+func (m *MockReceiptIngestionService) IngestXMLBytes(raw []byte, user *models.User) (*models.InboxEntry, error) {
+	args := m.Called(raw, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.InboxEntry), args.Error(1)
+}
+
+func (m *MockReceiptIngestionService) IngestURL(rawURL string, user *models.User) (*models.InboxEntry, error) {
+	args := m.Called(rawURL, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.InboxEntry), args.Error(1)
+}
+
+// MockTelegramLinkService
+type MockTelegramLinkService struct {
+	mock.Mock
+}
+
+func (m *MockTelegramLinkService) GetStatus(user *models.User) (*TelegramLinkStatus, error) {
+	args := m.Called(user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*TelegramLinkStatus), args.Error(1)
+}
+
+func (m *MockTelegramLinkService) CreateLinkToken(user *models.User) (*TelegramLinkTokenResponse, error) {
+	args := m.Called(user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*TelegramLinkTokenResponse), args.Error(1)
+}
+
+func (m *MockTelegramLinkService) CompleteLink(input TelegramLinkCompleteInput) (*TelegramLinkStatus, error) {
+	args := m.Called(input)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*TelegramLinkStatus), args.Error(1)
+}
+
+func (m *MockTelegramLinkService) RevokeLink(user *models.User) error {
+	args := m.Called(user)
+	return args.Error(0)
+}
+
+// MockTelegramBotService
+type MockTelegramBotService struct {
+	mock.Mock
+}
+
+func (m *MockTelegramBotService) HandleUpdate(update *telegram.Update) error {
+	args := m.Called(update)
+	return args.Error(0)
+}
+
+// MockTelegramWebhookService
+type MockTelegramWebhookService struct {
+	mock.Mock
+}
+
+func (m *MockTelegramWebhookService) GetWebhookStatus() (*TelegramWebhookStatus, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*TelegramWebhookStatus), args.Error(1)
+}
+
+func (m *MockTelegramWebhookService) SyncWebhook() (*TelegramWebhookStatus, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*TelegramWebhookStatus), args.Error(1)
+}
+
+func (m *MockTelegramWebhookService) DeleteWebhook(dropPendingUpdates bool) error {
+	args := m.Called(dropPendingUpdates)
+	return args.Error(0)
 }
 
 // MockGoalService

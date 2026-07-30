@@ -36,6 +36,8 @@ func TestTransactionController(t *testing.T) {
 	r.DELETE("/transactions/:id/receipt", controller.DeleteReceipt)
 	r.DELETE("/transactions/photos/:id", controller.DeletePhoto)
 	r.GET("/transactions/predict", controller.PredictCategory)
+	r.GET("/transactions/:id/receipt-sources", controller.GetLinkedReceipts)
+	r.POST("/transactions/:id/receipt-sources/unlink", controller.UnlinkReceiptSource)
 
 	t.Run("Create Success JSON", func(t *testing.T) {
 		inputJSON := CreateTxJSON{
@@ -152,5 +154,23 @@ func TestTransactionController(t *testing.T) {
 		var res map[string]interface{}
 		json.Unmarshal(w.Body.Bytes(), &res)
 		assert.Equal(t, "/path/to/receipt.jpg", res["path"])
+	})
+
+	t.Run("Get Linked Receipts Success", func(t *testing.T) {
+		mockService.On("GetLinkedReceipts", "tx-1", mock.Anything).Return([]models.ReceiptSource{
+			{Base: models.Base{ID: "rs-1"}, Merchant: "Silpo"},
+		}, nil).Once()
+
+		w := PerformRequest(r, "GET", "/transactions/tx-1/receipt-sources", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("Unlink Receipt Source Success", func(t *testing.T) {
+		mockService.On("UnlinkReceiptSource", "tx-1", "rs-1", mock.Anything).Return(nil).Once()
+
+		w := PerformRequest(r, "POST", "/transactions/tx-1/receipt-sources/unlink", UnlinkReceiptSourceJSON{
+			ReceiptSourceID: "rs-1",
+		})
+		assert.Equal(t, http.StatusOK, w.Code)
 	})
 }

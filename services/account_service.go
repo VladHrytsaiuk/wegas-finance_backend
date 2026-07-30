@@ -1,7 +1,9 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
@@ -17,6 +19,7 @@ type CreateAccountInput struct {
 	InitialBalance int64
 	Color          string
 	CardNumber     string
+	CardNumbers    []string
 	PaymentSystem  string
 	OwnerID        string
 	BankName       string // Для карток (mono, privat...)
@@ -25,12 +28,42 @@ type CreateAccountInput struct {
 	GoalID         *string
 }
 
+func normalizeCardNumbers(primary string, numbers []string) []string {
+	seen := make(map[string]struct{}, len(numbers)+1)
+	result := make([]string, 0, len(numbers)+1)
+
+	for _, number := range append([]string{primary}, numbers...) {
+		number = strings.TrimSpace(number)
+		if len(number) != 4 {
+			continue
+		}
+		isDigits := true
+		for _, char := range number {
+			if char < '0' || char > '9' {
+				isDigits = false
+				break
+			}
+		}
+		if !isDigits {
+			continue
+		}
+		if _, exists := seen[number]; exists {
+			continue
+		}
+		seen[number] = struct{}{}
+		result = append(result, number)
+	}
+
+	return result
+}
+
 type AccountService interface {
 	Create(input CreateAccountInput, user *models.User) (*models.Account, error)
 	GetAll(user *models.User) ([]models.Account, error)
 	GetByID(id string, user *models.User) (*models.Account, error)
 	Update(id string, input CreateAccountInput, user *models.User) (*models.Account, error)
 	Delete(id string, user *models.User) error
+	UpdateMobileOrder(accountIDs []string, user *models.User) error
 }
 
 type accountService struct {
@@ -75,6 +108,7 @@ func (s *accountService) Create(input CreateAccountInput, user *models.User) (*m
 		BankName:       input.BankName,
 		CardType:       input.CardType,
 		CardNumber:     input.CardNumber,
+		CardNumbers:    normalizeCardNumbers(input.CardNumber, input.CardNumbers),
 		PaymentSystem:  paymentSystem,
 		IsArchived:     false,
 		IsGroup:        false,
@@ -156,6 +190,7 @@ func (s *accountService) Update(id string, input CreateAccountInput, user *model
 	account.Type = input.Type
 	account.Color = input.Color
 	account.CardNumber = input.CardNumber
+	account.CardNumbers = normalizeCardNumbers(input.CardNumber, input.CardNumbers)
 	account.StorageTypeID = input.StorageTypeID
 	account.GoalID = finalGoalID
 
@@ -211,4 +246,36 @@ func (s *accountService) Delete(id string, user *models.User) error {
 			Where("id = ?", id).
 			Update("deleted_at", time.Now().UnixMilli()).Error
 	})
+}
+
+func (s *accountService) UpdateMobileOrder(accountIDs []string, user *models.User) error {
+	accessibleAccounts, err := s.GetAll(user)
+	if err != nil {
+		return err
+	}
+
+	accessibleIDs := make(map[string]struct{}, len(accessibleAccounts))
+	for _, account := range accessibleAccounts {
+		accessibleIDs[account.ID] = struct{}{}
+	}
+
+	seen := make(map[string]struct{}, len(accountIDs))
+	for _, accountID := range accountIDs {
+		if _, ok := accessibleIDs[accountID]; !ok {
+			return errors.New("account is not accessible")
+		}
+		if _, duplicate := seen[accountID]; duplicate {
+			return errors.New("duplicate account id in order payload")
+		}
+		seen[accountID] = struct{}{}
+	}
+
+	payload, err := json.Marshal(accountIDs)
+	if err != nil {
+		return err
+	}
+
+	return s.db.Model(&models.User{}).
+		Where("id = ? AND deleted_at IS NULL", user.ID).
+		Update("mobile_accounts_order", string(payload)).Error
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"strings"
 
 	// 🔥 ДОДАЙ ЦЕЙ ІМПОРТ
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/VladHrytsaiuk/wegas-finance/backend/database"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/models"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/pkg/config"
+	"github.com/VladHrytsaiuk/wegas-finance/backend/pkg/telegram"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/repositories"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/routes"
 	"github.com/VladHrytsaiuk/wegas-finance/backend/services"
@@ -106,6 +108,23 @@ func main() {
 	}
 }
 
+func bootstrapPlatformAdmins(db *gorm.DB, configuredEmails string) {
+	for _, rawEmail := range strings.Split(configuredEmails, ",") {
+		email := strings.TrimSpace(strings.ToLower(rawEmail))
+		if email == "" {
+			continue
+		}
+		result := db.Model(&models.User{}).
+			Where("LOWER(email) = ? AND deleted_at IS NULL", email).
+			Update("is_platform_admin", true)
+		if result.Error != nil {
+			log.Printf("failed to bootstrap platform admin %q: %v", email, result.Error)
+		} else if result.RowsAffected > 0 {
+			log.Printf("platform admin access granted to %s", email)
+		}
+	}
+}
+
 func startApp() {
 	cfg := config.LoadConfig()
 	db := database.InitDB(cfg.DBPath)
@@ -126,8 +145,15 @@ func startApp() {
 		&models.ExchangeRate{},
 		&models.Transaction{},
 		&models.TransactionItem{},
+		&models.ReceiptMerchantPreference{},
+		&models.ReceiptItemCategoryPreference{},
 		&models.TransactionTag{},
 		&models.TransactionPhoto{},
+		&models.ReceiptSource{},
+		&models.ReceiptSourceItem{},
+		&models.InboxEntry{},
+		&models.TelegramLink{},
+		&models.TelegramLinkToken{},
 		&models.Asset{},
 		&models.AssetPhoto{},
 		&models.AssetDocument{},
@@ -143,9 +169,20 @@ func startApp() {
 		&models.MedicalRecord{},
 		&models.MedicalFile{},
 		&models.WebAuthnCredential{},
+		&models.SchemaMigration{},
+		&models.AuditLog{},
+		&models.SystemSetting{},
 	)
 	if err != nil {
 		log.Fatal("❌ Migration error:", err)
+	}
+
+	bootstrapPlatformAdmins(db, cfg.PlatformAdminEmails)
+	if err := utils.SeedGlobalCatalog(db); err != nil {
+		log.Fatal("❌ Global catalog seed error:", err)
+	}
+	if err := database.RunDataMigrations(db, cfg.DBPath, database.DataMigrations); err != nil {
+		log.Fatal("❌ Data migration error:", err)
 	}
 
 	go func() {
@@ -158,6 +195,8 @@ func startApp() {
 	userRepo := repositories.NewUserRepository(db)
 	waRepo := repositories.NewWebAuthnRepository(db)
 	accountRepo := repositories.NewAccountRepository(db)
+	inboxRepo := repositories.NewInboxRepository(db)
+	telegramLinkRepo := repositories.NewTelegramLinkRepository(db)
 	categoryRepo := repositories.NewCategoryRepository(db)
 	cpRepo := repositories.NewCounterpartyRepository(db)
 	tagRepo := repositories.NewTagRepository(db)
@@ -176,7 +215,7 @@ func startApp() {
 	wsHub := utils.NewWSHub()
 	go wsHub.Run()
 
-	storageService := services.NewLocalStorageService("./uploads")
+	storageService := services.NewLocalStorageService(cfg.UploadsDir)
 	clock := utils.NewRealClock()
 
 	importService := services.NewImportService(db)
@@ -188,6 +227,22 @@ func startApp() {
 	userService := services.NewUserService(userRepo, wsHub, db)
 	authService := services.NewAuthService(userRepo, waRepo, jwtService, cfg.SecretKey, cfg.RegistrationCode)
 	accountService := services.NewAccountService(accountRepo, db)
+	inboxService := services.NewInboxService(inboxRepo, db)
+	receiptIngestionService := services.NewReceiptIngestionService(db, inboxService)
+	telegramLinkService := services.NewTelegramLinkService(telegramLinkRepo, db, cfg.TgReceiptBotUsername)
+	telegramWebhookService := services.NewTelegramWebhookService(
+		telegram.NewBotClient(cfg.TgReceiptBotToken),
+		cfg.AppURL,
+		cfg.TgReceiptWebhookSecret,
+	)
+	telegramBotService := services.NewTelegramBotService(
+		telegram.NewBotClient(cfg.TgReceiptBotToken),
+		telegramLinkRepo,
+		userRepo,
+		accountService,
+		inboxService,
+		receiptIngestionService,
+	)
 	tagService := services.NewTagService(tagRepo)
 	txService := services.NewTransactionService(db, txRepo, cpRepo, assetRepo, storageService, clock)
 	exportService := services.NewExportService(exportRepo)
@@ -195,13 +250,16 @@ func startApp() {
 	statsService := services.NewStatsService(statsRepo, currencyService)
 	assetService := services.NewAssetService(assetRepo, txRepo, storageService, clock)
 	utilityService := services.NewUtilityService(utilityRepo, txRepo, assetRepo)
-	monobankService := services.NewMonobankService(db, txService, accountRepo, clock)
+	monobankService := services.NewMonobankService(db, txService, accountRepo, clock, inboxService)
 	goalService := services.NewGoalService(goalRepo, accountRepo, currencyService)
 	storageTypeService := services.NewStorageTypeService(storageTypeRepo)
 	feedbackService := services.NewFeedbackService(cfg.TgBotToken, cfg.TgChatID)
 	shoppingService := services.NewShoppingService(shoppingRepo)
 	wishlistService := services.NewWishlistService(wishlistRepo) // <--- 3. ДОДАНО SERVICE
 	familyJoinService := services.NewFamilyJoinService(familyJoinRepo, userRepo, wsHub, db)
+
+	adminService := services.NewAdminService(db)
+	auditService := services.NewAuditService(db)
 
 	waService, err := services.NewWebAuthnService(cfg.RPID, cfg.AppURL, waRepo, userRepo)
 	if err != nil {
@@ -213,19 +271,27 @@ func startApp() {
 	appControllers := routes.AppControllers{
 		Auth: controllers.NewAuthController(authService), User: controllers.NewUserController(userService),
 		Account: controllers.NewAccountController(accountService), Category: controllers.NewCategoryController(categoryService),
-		Counterparty: controllers.NewCounterpartyController(cpService), Tag: controllers.NewTagController(tagService),
+		Inbox:           controllers.NewInboxController(inboxService, storageService),
+		TelegramLink:    controllers.NewTelegramLinkController(telegramLinkService),
+		TelegramBot:     controllers.NewTelegramBotController(telegramBotService, cfg.TgReceiptWebhookSecret),
+		TelegramWebhook: controllers.NewTelegramWebhookController(telegramWebhookService),
+		Counterparty:    controllers.NewCounterpartyController(cpService), Tag: controllers.NewTagController(tagService),
 		Transaction: controllers.NewTransactionController(txService), Dashboard: controllers.NewDashboardController(statsService, userRepo),
 		Role: controllers.NewRoleController(roleService), Export: controllers.NewExportController(exportService),
-		Import: controllers.NewImportController(importService), Settings: controllers.NewSettingsController(userRepo),
+		Import: controllers.NewImportController(importService), ReceiptIngestion: controllers.NewReceiptIngestionController(receiptIngestionService), Settings: controllers.NewSettingsController(userRepo),
 		Monobank: controllers.NewMonobankController(monobankService), Asset: controllers.NewAssetController(assetService),
 		Utility: controllers.NewUtilityController(utilityService), Goal: controllers.NewGoalController(goalService),
-		StorageType: controllers.NewStorageTypeController(storageTypeService), Currency: controllers.NewCurrencyController(currencyService),
+		AdminCatalog: controllers.NewAdminCatalogController(db, auditService),
+		StorageType:  controllers.NewStorageTypeController(storageTypeService), Currency: controllers.NewCurrencyController(currencyService),
 		Feedback: controllers.NewFeedbackController(feedbackService),
 		Shopping: controllers.NewShoppingController(shoppingService),
 		Wishlist: controllers.NewWishlistController(wishlistService), // <--- 4. ДОДАНО КОНТРОЛЕР
 		Family:   controllers.NewFamilyController(familyJoinService),
 		WS:       controllers.NewWSController(wsHub),
 		WebAuthn: controllers.NewWebAuthnController(waService, jwtService, userRepo),
+		AdminUsers: controllers.NewAdminUsersController(adminService, auditService),
+		AdminAudit: controllers.NewAdminAuditController(adminService, auditService),
+		AdminOverview: controllers.NewAdminOverviewController(db, auditService),
 	}
 
 	r := gin.Default()

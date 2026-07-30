@@ -18,6 +18,8 @@ require (
 	github.com/swaggo/swag v1.16.6
 	github.com/xuri/excelize/v2 v2.10.0
 	golang.org/x/crypto v0.52.0
+	golang.org/x/sync v0.20.0
+	golang.org/x/text v0.37.0
 	gorm.io/gorm v1.31.1
 )
 
@@ -76,9 +78,7 @@ require (
 	golang.org/x/arch v0.23.0 // indirect
 	golang.org/x/mod v0.35.0 // indirect
 	golang.org/x/net v0.54.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
-	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/tools v0.44.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect

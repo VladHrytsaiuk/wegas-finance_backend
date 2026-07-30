@@ -89,6 +89,11 @@ func (s *categoryService) Update(id string, input CategoryInput, user *models.Us
 	existing.Icon = input.Icon
 	existing.Color = input.Color
 	existing.ParentID = input.ParentID
+	// A family has explicitly customized this seeded template. Stop future
+	// platform-admin updates from overwriting this local record.
+	if existing.GlobalTemplateID != nil {
+		existing.GlobalTemplateID = nil
+	}
 	existing.UpdatedAt = time.Now().UnixMilli()
 
 	if err := s.repo.Update(existing); err != nil {

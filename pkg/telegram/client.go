@@ -131,10 +131,19 @@ func (c *client) sendJSON(url string, body []byte) error {
 	}
 	defer resp.Body.Close()
 
+	bodyBytes, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("telegram api error: %d, body: %s", resp.StatusCode, string(bodyBytes))
 	}
+
+	var payloadResp botResponse[json.RawMessage]
+	if err := json.Unmarshal(bodyBytes, &payloadResp); err != nil {
+		return fmt.Errorf("telegram api malformed response: %w, body: %s", err, string(bodyBytes))
+	}
+	if !payloadResp.OK {
+		return fmt.Errorf("telegram api error: %s", payloadResp.Description)
+	}
+
 	return nil
 }
 

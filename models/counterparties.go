@@ -7,6 +7,10 @@ type Counterparty struct {
 	ParentID string `json:"parent_id"`
 	IsGroup  bool   `json:"is_group"`
 
+	SystemKey        string  `json:"system_key" gorm:"index"`
+	GlobalTemplateID *string `json:"global_template_id" gorm:"index"`
+	IsArchived       bool    `json:"is_archived" gorm:"default:false"`
+
 	Name string `json:"name"`
 	Type string `json:"type"` // 'shop', 'person', 'other'
 
@@ -16,6 +20,9 @@ type Counterparty struct {
 	Icon string `json:"icon"`
 	Logo string `json:"logo"`
 
+	// Computed only for platform-admin catalog responses; not persisted.
+	UsageCount int64 `json:"usage_count" gorm:"->;-:migration"`
+
 	// Баланси (борги)
 	Balances []CounterpartyBalance `json:"balances" gorm:"foreignKey:CounterpartyID"`
 }
@@ -23,16 +30,20 @@ type Counterparty struct {
 // CounterpartyBalance - денормалізований баланс по валютах
 type CounterpartyBalance struct {
 	CounterpartyID string `gorm:"primaryKey" json:"counterparty_id"`
-	Currency       string `gorm:"primaryKey" json:"currency"` 
+	Currency       string `gorm:"primaryKey" json:"currency"`
 	Balance        int64  `json:"balance"` // + нам винні, - ми винні
 }
 
 // CounterpartyCategory - категорії контрагентів
 type CounterpartyCategory struct {
 	Base
-	FamilyID string `json:"family_id" gorm:"index"`
-	Name     string `json:"name"`
-	Type     string `json:"type"`
-	Icon     string `json:"icon"`
-	Color    string `json:"color"`
+	FamilyID         string  `json:"family_id" gorm:"index"`
+	SystemKey        string  `json:"system_key" gorm:"index"`
+	GlobalTemplateID *string `json:"global_template_id" gorm:"index"`
+	IsArchived       bool    `json:"is_archived" gorm:"default:false"`
+	Name             string  `json:"name"`
+	Type             string  `json:"type"`
+	Icon             string  `json:"icon"`
+	Color            string  `json:"color"`
+	UsageCount       int64   `json:"usage_count" gorm:"->;-:migration"`
 }

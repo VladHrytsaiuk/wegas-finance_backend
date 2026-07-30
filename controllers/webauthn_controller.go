@@ -124,13 +124,13 @@ func (ctrl *WebAuthnController) LoginVerify(c *gin.Context) {
 	}
 
 	// Issue Tokens
-	accessToken, err := ctrl.jwtService.GenerateAccessToken(user.ID, user.FamilyID, user.RoleID)
+	accessToken, err := ctrl.jwtService.GenerateAccessToken(user.ID, user.FamilyID, user.RoleID, user.SessionVersion)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate access token"})
 		return
 	}
 
-	refreshToken, err := ctrl.jwtService.GenerateRefreshToken(user.ID, user.FamilyID, user.RoleID)
+	refreshToken, err := ctrl.jwtService.GenerateRefreshToken(user.ID, user.FamilyID, user.RoleID, user.SessionVersion)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate refresh token"})
 		return
@@ -158,8 +158,14 @@ func (ctrl *WebAuthnController) Refresh(c *gin.Context) {
 		return
 	}
 
+	user, err := ctrl.userRepo.GetByID(claims.UserID)
+	if err != nil || !user.IsActive || user.SessionVersion != claims.SessionVersion {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Session expired or user blocked"})
+		return
+	}
+
 	// Generate new Access Token
-	accessToken, err := ctrl.jwtService.GenerateAccessToken(claims.UserID, claims.FamilyID, claims.RoleID)
+	accessToken, err := ctrl.jwtService.GenerateAccessToken(user.ID, user.FamilyID, user.RoleID, user.SessionVersion)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate access token"})
 		return

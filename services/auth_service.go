@@ -131,8 +131,8 @@ func (s *authService) Register(input RegisterInput) (*LoginResponse, error) {
 	}
 
 	// 5. Генерація токена
-	accessToken, _ := s.jwtService.GenerateAccessToken(user.ID, user.FamilyID, user.RoleID)
-	refreshToken, _ := s.jwtService.GenerateRefreshToken(user.ID, user.FamilyID, user.RoleID)
+	accessToken, _ := s.jwtService.GenerateAccessToken(user.ID, user.FamilyID, user.RoleID, user.SessionVersion)
+	refreshToken, _ := s.jwtService.GenerateRefreshToken(user.ID, user.FamilyID, user.RoleID, user.SessionVersion)
 
 	return &LoginResponse{
 		Token:        accessToken,
@@ -152,8 +152,8 @@ func (s *authService) Login(input LoginInput) (*LoginResponse, error) {
 		return nil, errors.New("invalid credentials")
 	}
 
-	accessToken, _ := s.jwtService.GenerateAccessToken(user.ID, user.FamilyID, user.RoleID)
-	refreshToken, _ := s.jwtService.GenerateRefreshToken(user.ID, user.FamilyID, user.RoleID)
+	accessToken, _ := s.jwtService.GenerateAccessToken(user.ID, user.FamilyID, user.RoleID, user.SessionVersion)
+	refreshToken, _ := s.jwtService.GenerateRefreshToken(user.ID, user.FamilyID, user.RoleID, user.SessionVersion)
 
 	return &LoginResponse{
 		Token:        accessToken,
@@ -259,8 +259,8 @@ skipCheck:
 	user.PinLockedUntil = 0
 	s.userRepo.Update(user)
 
-	accessToken, _ := s.jwtService.GenerateAccessToken(user.ID, user.FamilyID, user.RoleID)
-	refreshToken, _ := s.jwtService.GenerateRefreshToken(user.ID, user.FamilyID, user.RoleID)
+	accessToken, _ := s.jwtService.GenerateAccessToken(user.ID, user.FamilyID, user.RoleID, user.SessionVersion)
+	refreshToken, _ := s.jwtService.GenerateRefreshToken(user.ID, user.FamilyID, user.RoleID, user.SessionVersion)
 
 	return &LoginResponse{
 		Token:        accessToken,

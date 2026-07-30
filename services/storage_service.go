@@ -24,6 +24,8 @@ type localStorageService struct {
 	baseDir string
 }
 
+const maxStoredImageDimension = 1600
+
 func NewLocalStorageService(baseDir string) StorageService {
 	return &localStorageService{baseDir: baseDir}
 }
@@ -56,13 +58,43 @@ func (s *localStorageService) SaveImage(fileHeader *multipart.FileHeader, folder
 		return "", errors.New("invalid image format")
 	}
 
-	// Стиснення 80%
-	if err := jpeg.Encode(out, img, &jpeg.Options{Quality: 80}); err != nil {
+	// Receipt photos do not need the full camera resolution. Normalizing on the
+	// server keeps uploads from every client in the same compact format.
+	img = resizeImage(img, maxStoredImageDimension)
+	if err := jpeg.Encode(out, img, &jpeg.Options{Quality: 75}); err != nil {
 		return "", err
 	}
 
 	// Повертаємо відносний шлях для БД
 	return "/uploads/" + folder + "/" + filename, nil
+}
+
+func resizeImage(src image.Image, maxDimension int) image.Image {
+	bounds := src.Bounds()
+	width, height := bounds.Dx(), bounds.Dy()
+	if width <= maxDimension && height <= maxDimension {
+		return src
+	}
+
+	newWidth, newHeight := width, height
+	if width >= height {
+		newWidth = maxDimension
+		newHeight = height * maxDimension / width
+	} else {
+		newHeight = maxDimension
+		newWidth = width * maxDimension / height
+	}
+
+	dst := image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
+	for y := range newHeight {
+		sourceY := bounds.Min.Y + y*height/newHeight
+		for x := range newWidth {
+			sourceX := bounds.Min.X + x*width/newWidth
+			dst.Set(x, y, src.At(sourceX, sourceY))
+		}
+	}
+
+	return dst
 }
 
 func (s *localStorageService) SaveFile(fileHeader *multipart.FileHeader, folder string) (string, error) {
@@ -98,8 +130,8 @@ func (s *localStorageService) DeleteFile(path string) error {
 	if path == "" {
 		return nil
 	}
-	// Шлях у БД починається з /uploads/, тому додаємо крапку для відносного шляху на диску
-	// Використовуємо strings.TrimPrefix про всяк випадок
-	cleanPath := filepath.Join(".", strings.TrimPrefix(path, "/"))
+	// Public paths start with /uploads/. Keep their disk location aligned with
+	// the configured storage directory rather than the process working dir.
+	cleanPath := filepath.Join(s.baseDir, strings.TrimPrefix(path, "/uploads/"))
 	return os.Remove(cleanPath)
 }

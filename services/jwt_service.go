@@ -12,15 +12,16 @@ type TokenResponse struct {
 }
 
 type JWTClaims struct {
-	UserID   string `json:"user_id"`
-	FamilyID string `json:"family_id"`
-	RoleID   string `json:"role_id"`
+	UserID         string `json:"user_id"`
+	FamilyID       string `json:"family_id"`
+	RoleID         string `json:"role_id"`
+	SessionVersion int    `json:"session_version"`
 	jwt.RegisteredClaims
 }
 
 type JWTService interface {
-	GenerateAccessToken(userID, familyID, roleID string) (string, error)
-	GenerateRefreshToken(userID, familyID, roleID string) (string, error)
+	GenerateAccessToken(userID, familyID, roleID string, sessionVersion int) (string, error)
+	GenerateRefreshToken(userID, familyID, roleID string, sessionVersion int) (string, error)
 	ValidateToken(tokenStr string) (*JWTClaims, error)
 }
 
@@ -32,11 +33,12 @@ func NewJWTService(secretKey string) JWTService {
 	return &jwtService{secretKey: []byte(secretKey)}
 }
 
-func (s *jwtService) GenerateAccessToken(userID, familyID, roleID string) (string, error) {
+func (s *jwtService) GenerateAccessToken(userID, familyID, roleID string, sessionVersion int) (string, error) {
 	claims := JWTClaims{
-		UserID:   userID,
-		FamilyID: familyID,
-		RoleID:   roleID,
+		UserID:         userID,
+		FamilyID:       familyID,
+		RoleID:         roleID,
+		SessionVersion: sessionVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -47,11 +49,12 @@ func (s *jwtService) GenerateAccessToken(userID, familyID, roleID string) (strin
 	return token.SignedString(s.secretKey)
 }
 
-func (s *jwtService) GenerateRefreshToken(userID, familyID, roleID string) (string, error) {
+func (s *jwtService) GenerateRefreshToken(userID, familyID, roleID string, sessionVersion int) (string, error) {
 	claims := JWTClaims{
-		UserID:   userID,
-		FamilyID: familyID,
-		RoleID:   roleID,
+		UserID:         userID,
+		FamilyID:       familyID,
+		RoleID:         roleID,
+		SessionVersion: sessionVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(30 * 24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
