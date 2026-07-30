@@ -596,6 +596,10 @@ func (m *MockTelegramBotService) HandleUpdate(update *telegram.Update) error {
 	return args.Error(0)
 }
 
+func (m *MockTelegramBotService) StartPolling() {
+	m.Called()
+}
+
 // MockTelegramWebhookService
 type MockTelegramWebhookService struct {
 	mock.Mock

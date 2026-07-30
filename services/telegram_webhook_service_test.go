@@ -95,3 +95,7 @@ func (m *mockWebhookBotAPI) GetFile(fileID string) (*telegram.BotFile, error) {
 func (m *mockWebhookBotAPI) DownloadFile(filePath string) ([]byte, error) {
 	return nil, errors.New("not used")
 }
+
+func (m *mockWebhookBotAPI) GetUpdates(offset int, timeout int) ([]telegram.Update, error) {
+	return nil, errors.New("not used")
+}
