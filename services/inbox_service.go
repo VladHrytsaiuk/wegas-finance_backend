@@ -75,6 +75,7 @@ type InboxService interface {
 	SelectAccount(id string, accountID string, user *models.User) (*models.InboxEntry, error)
 	Link(id string, transactionID string, applyItems bool, learnFromTransaction bool, user *models.User) (*models.InboxEntry, error)
 	Unlink(id string, user *models.User) (*models.InboxEntry, error)
+	Delete(id string, user *models.User) error
 }
 
 type InboxAccountCandidate struct {
@@ -119,6 +120,34 @@ type inboxService struct {
 
 func NewInboxService(repo repositories.InboxRepository, db *gorm.DB) InboxService {
 	return &inboxService{repo: repo, db: db}
+}
+
+func (s *inboxService) Delete(id string, user *models.User) error {
+	var entry models.InboxEntry
+	if err := s.db.Where("id = ? AND family_id = ? AND deleted_at IS NULL", id, user.FamilyID).First(&entry).Error; err != nil {
+		return err
+	}
+
+	if entry.Status == models.InboxEntryStatusLinked {
+		return errors.New("cannot delete a linked inbox entry. unlink it first")
+	}
+
+	// Soft delete the entry and its receipt source (so it's gone)
+	tx := s.db.Begin()
+	
+	if err := tx.Where("id = ?", id).Delete(&models.InboxEntry{}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	
+	if entry.ReceiptSourceID != "" {
+		if err := tx.Where("id = ?", entry.ReceiptSourceID).Delete(&models.ReceiptSource{}).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	
+	return tx.Commit().Error
 }
 
 func (s *inboxService) Create(input InboxCreateInput, user *models.User) (*models.InboxEntry, error) {

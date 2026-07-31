@@ -287,6 +287,40 @@ func (h *InboxController) GetOne(c *gin.Context) {
 	c.JSON(http.StatusOK, entry)
 }
 
+// Delete godoc
+// @Summary Delete inbox entry
+// @Description Hard or soft deletes an inbox entry and its associated receipt source.
+// @Tags Inbox
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Inbox entry ID"
+// @Success 200 {object} map[string]string "Status ok"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /inbox/{id} [delete]
+func (h *InboxController) Delete(c *gin.Context) {
+	currentUser, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	user := currentUser.(*models.User)
+
+	err := h.service.Delete(c.Param("id"), user)
+	if err != nil {
+		if strings.Contains(err.Error(), "cannot delete") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
 // GetAccountCandidates godoc
 // @Summary Find account candidates from the receipt payment mask
 // @Description Matches the trailing 1-4 digits of EПЗ against physical and device-token card masks.

@@ -203,6 +203,7 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 			protected.GET("/inbox/:id/account-candidates", c.Inbox.GetAccountCandidates)
 			protected.GET("/inbox/:id/transaction-candidates", c.Inbox.GetTransactionCandidates)
 			protected.GET("/inbox/:id", c.Inbox.GetOne)
+			protected.DELETE("/inbox/:id", c.Inbox.Delete)
 			protected.PATCH("/inbox/:id/account", c.Inbox.SelectAccount)
 			protected.POST("/inbox/:id/link", c.Inbox.Link)
 			protected.POST("/inbox/:id/unlink", c.Inbox.Unlink)

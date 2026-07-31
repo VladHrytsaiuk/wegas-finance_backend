@@ -441,6 +441,11 @@ type MockInboxService struct {
 	mock.Mock
 }
 
+func (m *MockInboxService) Delete(id string, user *models.User) error {
+	args := m.Called(id, user)
+	return args.Error(0)
+}
+
 func (m *MockInboxService) Create(input InboxCreateInput, user *models.User) (*models.InboxEntry, error) {
 	args := m.Called(input, user)
 	if args.Get(0) == nil {
