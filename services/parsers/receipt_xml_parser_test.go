@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,6 +33,9 @@ func TestSilpoXMLParser_Parse(t *testing.T) {
 		assert.Equal(t, "VISA", receipt.Payments[0].Provider)
 		assert.Equal(t, "4149XXXXXXXX9043", receipt.Payments[0].Mask)
 	}
+	kyiv, err := time.LoadLocation("Europe/Kyiv")
+	require.NoError(t, err)
+	assert.Equal(t, time.Date(2026, time.July, 15, 18, 55, 30, 0, kyiv).UnixMilli(), receipt.ReceiptDate.UnixMilli())
 }
 
 func TestSilpoXMLParser_ParseTipsSamples(t *testing.T) {

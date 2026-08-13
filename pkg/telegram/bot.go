@@ -17,6 +17,7 @@ type BotAPI interface {
 	SetWebhook(webhookURL string, secretToken string) error
 	GetWebhookInfo() (*WebhookInfo, error)
 	DeleteWebhook(dropPendingUpdates bool) error
+	GetUpdates(offset int, timeout int) ([]Update, error)
 }
 
 type botClient struct {
@@ -226,6 +227,36 @@ func (c *botClient) DeleteWebhook(dropPendingUpdates bool) error {
 		"drop_pending_updates": dropPendingUpdates,
 	})
 	return c.sendJSON(url, body)
+}
+
+func (c *botClient) GetUpdates(offset int, timeout int) ([]Update, error) {
+	url := fmt.Sprintf(tgBaseURL, c.token, "getUpdates")
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"offset":  offset,
+		"timeout": timeout,
+	})
+
+	resp, err := c.httpClient.Post(url, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("telegram api error: %d, body: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var payloadResp botResponse[[]Update]
+	if err := json.NewDecoder(resp.Body).Decode(&payloadResp); err != nil {
+		return nil, err
+	}
+	if !payloadResp.OK {
+		return nil, fmt.Errorf("telegram api error: %s", payloadResp.Description)
+	}
+
+	return payloadResp.Result, nil
 }
 
 func (c *botClient) sendJSON(url string, body []byte) error {

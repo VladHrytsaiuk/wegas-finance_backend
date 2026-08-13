@@ -15,6 +15,7 @@ import (
 
 type TelegramBotService interface {
 	HandleUpdate(update *telegram.Update) error
+	StartPolling()
 }
 
 type telegramBotService struct {
@@ -207,4 +208,29 @@ func documentMimeType(document *telegram.Document) string {
 		return ""
 	}
 	return document.MimeType
+}
+
+func (s *telegramBotService) StartPolling() {
+	offset := 0
+	log.Println("🤖 Starting Telegram Bot in Long Polling mode...")
+
+	for {
+		updates, err := s.botClient.GetUpdates(offset, 30)
+		if err != nil {
+			log.Printf("❌ Error polling telegram updates: %v", err)
+			continue
+		}
+
+		for _, update := range updates {
+			if update.UpdateID >= int64(offset) {
+				offset = int(update.UpdateID) + 1
+			}
+
+			go func(u telegram.Update) {
+				if err := s.HandleUpdate(&u); err != nil {
+					log.Printf("❌ Error handling update %d: %v", u.UpdateID, err)
+				}
+			}(update)
+		}
+	}
 }

@@ -243,6 +243,13 @@ func startApp() {
 		inboxService,
 		receiptIngestionService,
 	)
+
+	if strings.HasPrefix(cfg.AppURL, "http://") {
+		log.Println("⚠️ APP_URL uses HTTP. Telegram Webhooks require HTTPS. Falling back to Long Polling for Telegram Bot.")
+		_ = telegramWebhookService.DeleteWebhook(true)
+		go telegramBotService.StartPolling()
+	}
+
 	tagService := services.NewTagService(tagRepo)
 	txService := services.NewTransactionService(db, txRepo, cpRepo, assetRepo, storageService, clock)
 	exportService := services.NewExportService(exportRepo)

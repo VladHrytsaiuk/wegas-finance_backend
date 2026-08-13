@@ -203,6 +203,14 @@ func (m *mockBotAPI) DeleteWebhook(dropPendingUpdates bool) error {
 	return args.Error(0)
 }
 
+func (m *mockBotAPI) GetUpdates(offset int, timeout int) ([]telegram.Update, error) {
+	args := m.Called(offset, timeout)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]telegram.Update), args.Error(1)
+}
+
 func createTelegramTestUser(t *testing.T, db *gorm.DB, email string) *models.User {
 	t.Helper()
 

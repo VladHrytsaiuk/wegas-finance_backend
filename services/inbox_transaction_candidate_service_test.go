@@ -29,9 +29,61 @@ func TestScoreTransactionCandidate(t *testing.T) {
 		Note:     "Сільпо Київ",
 	}
 
-	candidate := scoreTransactionCandidate(entry, transaction)
+	candidate := scoreTransactionCandidate(entry, transaction, true)
 	assert.Equal(t, 90, candidate.Score)
 	assert.Equal(t, []string{"рахунок", "сума", "валюта", "час", "контрагент"}, candidate.MatchedBy)
+}
+
+func TestFindTransactionCandidatesWithoutSelectedAccount(t *testing.T) {
+	db, err := repositories.SetupTestDB()
+	require.NoError(t, err)
+
+	familyID, accountID := uuid.NewString(), uuid.NewString()
+	user := &models.User{Base: models.Base{ID: uuid.NewString()}, FamilyID: familyID}
+	total := int64(93310)
+	receiptDate := time.Date(2026, time.July, 18, 12, 0, 0, 0, time.UTC).UnixMilli()
+	receipt := models.ReceiptSource{Base: models.Base{ID: uuid.NewString()}, FamilyID: familyID, UserID: user.ID, Total: &total, Currency: "UAH"}
+	require.NoError(t, db.Create(&receipt).Error)
+	entry := models.InboxEntry{Base: models.Base{ID: uuid.NewString()}, FamilyID: familyID, UserID: user.ID, ReceiptSourceID: receipt.ID, Total: &total, Currency: "UAH", OccurredAt: &receiptDate}
+	require.NoError(t, db.Create(&entry).Error)
+	matching := models.Transaction{Base: models.Base{ID: uuid.NewString()}, FamilyID: familyID, UserID: user.ID, AccountID: accountID, Amount: total, Currency: "UAH", Date: receiptDate + int64(time.Hour/time.Millisecond), ExternalID: "mono-match", Type: "expense"}
+	require.NoError(t, db.Create(&matching).Error)
+
+	service := NewInboxService(repositories.NewInboxRepository(db), db)
+	candidates, err := service.FindTransactionCandidates(entry.ID, user)
+	require.NoError(t, err)
+	if assert.Len(t, candidates, 1) {
+		assert.Equal(t, matching.ID, candidates[0].TransactionID)
+		assert.Equal(t, "medium", candidates[0].Confidence)
+		assert.Contains(t, candidates[0].MatchedBy, "рахунок не визначено")
+	}
+}
+
+func TestFindTransactionCandidatesIncludesManualTransactionButDoesNotAutoLinkIt(t *testing.T) {
+	db, err := repositories.SetupTestDB()
+	require.NoError(t, err)
+
+	familyID, accountID := uuid.NewString(), uuid.NewString()
+	user := &models.User{Base: models.Base{ID: uuid.NewString()}, FamilyID: familyID}
+	total := int64(93310)
+	receiptDate := time.Date(2026, time.July, 18, 12, 0, 0, 0, time.UTC).UnixMilli()
+	receipt := models.ReceiptSource{Base: models.Base{ID: uuid.NewString()}, FamilyID: familyID, UserID: user.ID, Total: &total, Currency: "UAH"}
+	require.NoError(t, db.Create(&receipt).Error)
+	entry := models.InboxEntry{Base: models.Base{ID: uuid.NewString()}, FamilyID: familyID, UserID: user.ID, ReceiptSourceID: receipt.ID, SelectedAccountID: &accountID, Total: &total, Currency: "UAH", OccurredAt: &receiptDate, ReviewRequired: false}
+	require.NoError(t, db.Create(&entry).Error)
+	manual := models.Transaction{Base: models.Base{ID: uuid.NewString(), IsSynced: false}, FamilyID: familyID, UserID: user.ID, AccountID: accountID, Amount: total, Currency: "UAH", Date: receiptDate + int64(time.Hour/time.Millisecond), Type: "expense"}
+	require.NoError(t, db.Create(&manual).Error)
+
+	service := NewInboxService(repositories.NewInboxRepository(db), db)
+	candidates, err := service.FindTransactionCandidates(entry.ID, user)
+	require.NoError(t, err)
+	if assert.Len(t, candidates, 1) {
+		assert.Equal(t, manual.ID, candidates[0].TransactionID)
+		assert.False(t, candidates[0].IsSynced)
+	}
+	_, didLink, err := service.TryAutoLink(entry.ID, user)
+	require.NoError(t, err)
+	assert.False(t, didLink)
 }
 
 func TestFindTransactionCandidatesExcludesLinkedTransactions(t *testing.T) {
@@ -172,6 +224,37 @@ func TestLinkRejectsTransactionThatDoesNotMatchReceipt(t *testing.T) {
 			assert.Nil(t, source.LinkedTransactionID)
 		})
 	}
+}
+
+func TestLinkInheritsSyncedTransactionClassificationWhenReceiptHasNone(t *testing.T) {
+	db, err := repositories.SetupTestDB()
+	require.NoError(t, err)
+
+	familyID, accountID := uuid.NewString(), uuid.NewString()
+	user := &models.User{Base: models.Base{ID: uuid.NewString()}, FamilyID: familyID}
+	total := int64(93310)
+	receipt := models.ReceiptSource{Base: models.Base{ID: uuid.NewString()}, FamilyID: familyID, UserID: user.ID, Total: &total}
+	require.NoError(t, db.Create(&receipt).Error)
+	entry := models.InboxEntry{Base: models.Base{ID: uuid.NewString()}, FamilyID: familyID, UserID: user.ID, ReceiptSourceID: receipt.ID, Total: &total}
+	require.NoError(t, db.Create(&entry).Error)
+	transaction := models.Transaction{
+		Base: models.Base{ID: uuid.NewString()}, FamilyID: familyID, UserID: user.ID, AccountID: accountID,
+		Amount: total, Type: "expense", CounterpartyID: "synced-counterparty", CategoryID: "synced-category",
+	}
+	require.NoError(t, db.Create(&transaction).Error)
+
+	service := NewInboxService(repositories.NewInboxRepository(db), db)
+	linked, err := service.Link(entry.ID, transaction.ID, false, false, user)
+	require.NoError(t, err)
+	require.NotNil(t, linked.SelectedAccountID)
+	assert.Equal(t, accountID, *linked.SelectedAccountID)
+
+	var source models.ReceiptSource
+	require.NoError(t, db.First(&source, "id = ?", receipt.ID).Error)
+	require.NotNil(t, source.CounterpartyID)
+	require.NotNil(t, source.CategoryID)
+	assert.Equal(t, "synced-counterparty", *source.CounterpartyID)
+	assert.Equal(t, "synced-category", *source.CategoryID)
 }
 
 func TestAutoLinkForAccount(t *testing.T) {

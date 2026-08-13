@@ -34,4 +34,13 @@ func TestFindAccountCandidatesByPaymentMask(t *testing.T) {
 			assert.False(t, candidates[0].Recommended)
 		}
 	})
+
+	t.Run("partial mask with trailing separators is still offered for manual selection", func(t *testing.T) {
+		candidates := findAccountCandidates("ЕПЗ ••66 **", "UAH", accounts)
+		if assert.Len(t, candidates, 1) {
+			assert.Equal(t, "card-1", candidates[0].AccountID)
+			assert.Equal(t, 2, candidates[0].MatchedDigits)
+			assert.False(t, candidates[0].Recommended)
+		}
+	})
 }
