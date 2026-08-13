@@ -100,9 +100,15 @@ type InboxTransactionCandidate struct {
 	Score            int      `json:"score"`
 	Confidence       string   `json:"confidence"`
 	MatchedBy        []string `json:"matched_by"`
+	IsSynced         bool     `json:"is_synced"`
 }
 
-func transactionCandidateConfidence(score int) string {
+func transactionCandidateConfidence(score int, accountConfirmed bool) string {
+	// Without a confirmed account an exact amount/currency/time match is still
+	// useful to show to the user, but it must never be auto-linked.
+	if !accountConfirmed && score >= 45 {
+		return "medium"
+	}
 	switch {
 	case score >= autoLinkMinimumScore:
 		return "high"
@@ -134,19 +140,19 @@ func (s *inboxService) Delete(id string, user *models.User) error {
 
 	// Soft delete the entry and its receipt source (so it's gone)
 	tx := s.db.Begin()
-	
+
 	if err := tx.Where("id = ?", id).Delete(&models.InboxEntry{}).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
-	
+
 	if entry.ReceiptSourceID != "" {
 		if err := tx.Where("id = ?", entry.ReceiptSourceID).Delete(&models.ReceiptSource{}).Error; err != nil {
 			tx.Rollback()
 			return err
 		}
 	}
-	
+
 	return tx.Commit().Error
 }
 
@@ -343,6 +349,12 @@ func (s *inboxService) GetByID(id string, user *models.User) (*models.InboxEntry
 func paymentMaskSuffix(mask string) string {
 	mask = strings.TrimSpace(mask)
 	end := len(mask)
+	// Some fiscal providers append spaces, separators or masking characters
+	// after the visible digits (for example "•• 12 **"). Find the last digit
+	// run instead of requiring digits to be the literal end of the field.
+	for end > 0 && (mask[end-1] < '0' || mask[end-1] > '9') {
+		end--
+	}
 	start := end
 	for start > 0 {
 		char := mask[start-1]
@@ -470,9 +482,15 @@ func receiptMerchantMatchesTransaction(source models.ReceiptSource, transaction 
 	return false
 }
 
-func scoreTransactionCandidate(entry *models.InboxEntry, transaction models.Transaction) InboxTransactionCandidate {
-	score := 40 // The user explicitly confirmed this account for the receipt.
-	matchedBy := []string{"рахунок"}
+func scoreTransactionCandidate(entry *models.InboxEntry, transaction models.Transaction, accountConfirmed bool) InboxTransactionCandidate {
+	score := 0
+	matchedBy := []string{}
+	if accountConfirmed {
+		score += 40 // The user explicitly confirmed this account for the receipt.
+		matchedBy = append(matchedBy, "рахунок")
+	} else {
+		matchedBy = append(matchedBy, "рахунок не визначено")
+	}
 
 	total := entry.Total
 	if total == nil {
@@ -518,8 +536,11 @@ func scoreTransactionCandidate(entry *models.InboxEntry, transaction models.Tran
 		Note:             transaction.Note,
 		CounterpartyName: transaction.Counterparty.Name,
 		Score:            score,
-		Confidence:       transactionCandidateConfidence(score),
+		Confidence:       transactionCandidateConfidence(score, accountConfirmed),
 		MatchedBy:        matchedBy,
+		// ExternalID is the stable marker of a bank-imported transaction.
+		// Older synced rows may have Base.IsSynced unset.
+		IsSynced: transaction.ExternalID != "",
 	}
 }
 
@@ -528,10 +549,6 @@ func (s *inboxService) FindTransactionCandidates(id string, user *models.User) (
 	if err != nil {
 		return nil, err
 	}
-	if entry.SelectedAccountID == nil || *entry.SelectedAccountID == "" {
-		return []InboxTransactionCandidate{}, nil
-	}
-
 	total := entry.Total
 	if total == nil {
 		total = entry.ReceiptSource.Total
@@ -540,10 +557,14 @@ func (s *inboxService) FindTransactionCandidates(id string, user *models.User) (
 		return []InboxTransactionCandidate{}, nil
 	}
 
+	accountConfirmed := entry.SelectedAccountID != nil && *entry.SelectedAccountID != ""
 	query := s.db.
 		Preload("Counterparty").
-		Where("family_id = ? AND account_id = ? AND amount = ? AND external_id <> '' AND deleted_at IS NULL", user.FamilyID, *entry.SelectedAccountID, *total).
+		Where("family_id = ? AND amount = ? AND deleted_at IS NULL", user.FamilyID, *total).
 		Where("NOT EXISTS (SELECT 1 FROM receipt_sources WHERE receipt_sources.linked_transaction_id = transactions.id AND receipt_sources.deleted_at IS NULL)")
+	if accountConfirmed {
+		query = query.Where("account_id = ?", *entry.SelectedAccountID)
+	}
 	if user.RoleID == "child" {
 		query = query.Where("user_id = ?", user.ID)
 	}
@@ -564,7 +585,7 @@ func (s *inboxService) FindTransactionCandidates(id string, user *models.User) (
 
 	candidates := make([]InboxTransactionCandidate, 0, len(transactions))
 	for _, transaction := range transactions {
-		candidates = append(candidates, scoreTransactionCandidate(entry, transaction))
+		candidates = append(candidates, scoreTransactionCandidate(entry, transaction, accountConfirmed))
 	}
 	sort.Slice(candidates, func(i, j int) bool {
 		if candidates[i].Score != candidates[j].Score {
@@ -589,7 +610,7 @@ func (s *inboxService) TryAutoLink(id string, user *models.User) (*models.InboxE
 	if err != nil {
 		return nil, false, err
 	}
-	if len(candidates) != 1 || candidates[0].Score < autoLinkMinimumScore {
+	if len(candidates) != 1 || !candidates[0].IsSynced || candidates[0].Score < autoLinkMinimumScore {
 		return entry, false, nil
 	}
 	linked, err := s.Link(id, candidates[0].TransactionID, len(entry.ReceiptSource.Items) > 0, false, user)
@@ -821,6 +842,27 @@ func (s *inboxService) Link(id string, transactionID string, applyItems bool, le
 			}
 		}
 
+		// Bank-synced transactions often already know the merchant/category,
+		// while the fiscal receipt only contains item rows. Keep those synced
+		// values and copy them to the receipt source for later item enrichment.
+		// If the receipt has its own classification, the receipt stays authoritative.
+		if !learnFromTransaction {
+			sourceUpdates := map[string]interface{}{}
+			if entry.ReceiptSource.CounterpartyID == nil && txModel.CounterpartyID != "" {
+				entry.ReceiptSource.CounterpartyID = &txModel.CounterpartyID
+				sourceUpdates["counterparty_id"] = txModel.CounterpartyID
+			}
+			if entry.ReceiptSource.CategoryID == nil && txModel.CategoryID != "" {
+				entry.ReceiptSource.CategoryID = &txModel.CategoryID
+				sourceUpdates["category_id"] = txModel.CategoryID
+			}
+			if len(sourceUpdates) > 0 {
+				if err := tx.Model(&models.ReceiptSource{}).Where("id = ?", entry.ReceiptSourceID).Updates(sourceUpdates).Error; err != nil {
+					return err
+				}
+			}
+		}
+
 		for _, receiptPath := range receiptFilePaths(entry.ReceiptSource) {
 			var existing int64
 			if err := tx.Model(&models.TransactionPhoto{}).
@@ -848,6 +890,10 @@ func (s *inboxService) Link(id string, transactionID string, applyItems bool, le
 		}
 
 		entry.MatchedTransactionID = &txModel.ID
+		if entry.SelectedAccountID == nil || *entry.SelectedAccountID == "" {
+			// A manual link is an explicit confirmation of the transaction's account.
+			entry.SelectedAccountID = &txModel.AccountID
+		}
 		entry.Status = models.InboxEntryStatusLinked
 		if err := tx.Save(entry).Error; err != nil {
 			return err

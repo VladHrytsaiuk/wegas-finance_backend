@@ -18,6 +18,16 @@ type ReceiptXMLParser interface {
 
 type silpoXMLParser struct{}
 
+// Fiscal XML receipts contain a local cash-register time without an offset.
+// Treat it explicitly as Ukrainian civil time, never as the server's local zone.
+var ukrainianTimeLocation = func() *time.Location {
+	location, err := time.LoadLocation("Europe/Kyiv")
+	if err != nil {
+		panic("Europe/Kyiv timezone must be available: " + err.Error())
+	}
+	return location
+}()
+
 func NewSilpoXMLParser() ReceiptXMLParser {
 	return &silpoXMLParser{}
 }
@@ -324,7 +334,7 @@ func parseReceiptTimestamp(value string) time.Time {
 	if len(value) != 14 {
 		return time.Time{}
 	}
-	t, err := time.ParseInLocation("20060102150405", value, time.Local)
+	t, err := time.ParseInLocation("20060102150405", value, ukrainianTimeLocation)
 	if err != nil {
 		return time.Time{}
 	}
@@ -336,7 +346,7 @@ func parseCheckTimestamp(dateValue string, timeValue string) time.Time {
 	if len(combined) != 14 {
 		return time.Time{}
 	}
-	t, err := time.ParseInLocation("02012006150405", combined, time.Local)
+	t, err := time.ParseInLocation("02012006150405", combined, ukrainianTimeLocation)
 	if err != nil {
 		return time.Time{}
 	}
