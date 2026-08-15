@@ -56,7 +56,7 @@ func parsePrivatBankXLS(r io.Reader) ([]ParsedTransaction, error) {
 		amountStr = strings.ReplaceAll(amountStr, " UAH", "")
 		amountStr = strings.ReplaceAll(amountStr, " EUR", "")
 		amountStr = strings.ReplaceAll(amountStr, " USD", "")
-		
+
 		amountSigned, err := utils.ParseAmountString(amountStr)
 		if err != nil {
 			continue
@@ -69,9 +69,14 @@ func parsePrivatBankXLS(r io.Reader) ([]ParsedTransaction, error) {
 
 		rawName := ""
 		lowerDesc := strings.ToLower(description)
-		
+		transferDirection := ""
+
 		if strings.Contains(lowerDesc, "скарбничк") {
 			txType = "transfer"
+			transferDirection = "in"
+			if amountSigned < 0 {
+				transferDirection = "out"
+			}
 			rawName = "Скарбничка"
 			if strings.Contains(lowerDesc, "округлення") {
 				description = "Округлення залишку"
@@ -101,13 +106,14 @@ func parsePrivatBankXLS(r io.Reader) ([]ParsedTransaction, error) {
 		}
 
 		transactions = append(transactions, ParsedTransaction{
-			Date:             t,
-			Amount:           abs(amountSigned), // Використовуємо існуючу функцію abs з monobank_parser.go
-			Description:      description,
-			CounterpartyName: counterpartyName,
-			Type:             txType,
-			BankCategory:     bankCategory,
-			RawLine:          strings.Join(row, " "),
+			Date:              t,
+			Amount:            abs(amountSigned), // Використовуємо існуючу функцію abs з monobank_parser.go
+			Description:       description,
+			CounterpartyName:  counterpartyName,
+			Type:              txType,
+			TransferDirection: transferDirection,
+			BankCategory:      bankCategory,
+			RawLine:           strings.Join(row, " "),
 		})
 	}
 	return transactions, nil

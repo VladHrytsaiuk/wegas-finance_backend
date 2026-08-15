@@ -36,6 +36,51 @@ var DataMigrations = []DataMigration{
 		Up: backfillBatchImportAccountBalances,
 	},
 	{ID: "20260815_correct_legacy_round_up_transfers", Up: correctLegacyRoundUpTransfers},
+	{ID: "20260815_purge_soft_deleted_transactions_and_accounts", Up: purgeSoftDeletedFinanceData},
+}
+
+// purgeSoftDeletedFinanceData permanently removes records the user already
+// soft-deleted. It deliberately runs once and RunDataMigrations creates a
+// SQLite backup before it is applied.
+func purgeSoftDeletedFinanceData(tx *gorm.DB) error {
+	var transactionIDs []string
+	if err := tx.Model(&models.Transaction{}).Where("deleted_at IS NOT NULL").Pluck("id", &transactionIDs).Error; err != nil {
+		return err
+	}
+	if len(transactionIDs) > 0 {
+		if err := tx.Where("transaction_id IN ?", transactionIDs).Delete(&models.TransactionItem{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("transaction_id IN ?", transactionIDs).Delete(&models.TransactionPhoto{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("transaction_id IN ?", transactionIDs).Delete(&models.TransactionTag{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("UPDATE receipt_sources SET linked_transaction_id = NULL WHERE linked_transaction_id IN ?", transactionIDs).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("UPDATE inbox_entries SET matched_transaction_id = NULL WHERE matched_transaction_id IN ?", transactionIDs).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("id IN ?", transactionIDs).Delete(&models.Transaction{}).Error; err != nil {
+			return err
+		}
+	}
+	var accountIDs []string
+	if err := tx.Model(&models.Account{}).Where("deleted_at IS NOT NULL").Pluck("id", &accountIDs).Error; err != nil {
+		return err
+	}
+	if len(accountIDs) == 0 {
+		return nil
+	}
+	if err := tx.Model(&models.Account{}).Where("round_up_target_account_id IN ?", accountIDs).Update("round_up_target_account_id", nil).Error; err != nil {
+		return err
+	}
+	if err := tx.Where("internal_account_id IN ?", accountIDs).Delete(&models.BankAccountMapping{}).Error; err != nil {
+		return err
+	}
+	return tx.Where("id IN ?", accountIDs).Delete(&models.Account{}).Error
 }
 
 // correctLegacyRoundUpTransfers fixes the old importer which represented an

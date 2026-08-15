@@ -21,10 +21,11 @@ type UnlinkReceiptSourceJSON struct {
 	ReceiptSourceID string `json:"receipt_source_id" binding:"required"`
 }
 type CreateTxJSON struct {
-	AccountID       string `json:"account_id" binding:"required"`
-	TargetAccountID string `json:"target_account_id"`
-	CategoryID      string `json:"category_id"`
-	CounterpartyID  string `json:"counterparty_id"`
+	AccountID         string `json:"account_id" binding:"required"`
+	TargetAccountID   string `json:"target_account_id"`
+	TransferDirection string `json:"transfer_direction"`
+	CategoryID        string `json:"category_id"`
+	CounterpartyID    string `json:"counterparty_id"`
 
 	Amount int64 `json:"amount" binding:"required"`
 
@@ -555,19 +556,20 @@ func (h *TransactionController) BatchCreate(c *gin.Context) {
 		}
 
 		inputs = append(inputs, services.CreateTransactionInput{
-			AccountID:       item.AccountID,
-			TargetAccountID: item.TargetAccountID,
-			CategoryID:      item.CategoryID,
-			CounterpartyID:  item.CounterpartyID,
-			Amount:          item.Amount,
-			TargetAmount:    item.TargetAmount,
-			Date:            item.Date,
-			Note:            item.Note,
-			Type:            item.Type,
-			Items:           itemsInput,
-			TagIDs:          item.TagIDs,
-			AssetID:         item.AssetID,
-			Mileage:         item.Mileage,
+			AccountID:         item.AccountID,
+			TargetAccountID:   item.TargetAccountID,
+			TransferDirection: item.TransferDirection,
+			CategoryID:        item.CategoryID,
+			CounterpartyID:    item.CounterpartyID,
+			Amount:            item.Amount,
+			TargetAmount:      item.TargetAmount,
+			Date:              item.Date,
+			Note:              item.Note,
+			Type:              item.Type,
+			Items:             itemsInput,
+			TagIDs:            item.TagIDs,
+			AssetID:           item.AssetID,
+			Mileage:           item.Mileage,
 			// 🔥 ПЕРЕДАЄМО ПРАПОРЕЦЬ В BATCH
 			IsForgiveness: item.IsForgiveness,
 		})

@@ -11,9 +11,12 @@ type ParsedTransaction struct {
 	Description      string
 	CounterpartyName string
 	Type             string
-	RawLine          string
-	MCC              string // 🔥 Додаємо це поле
-	BankCategory     string // 🔥 Додаємо поле для текстової категорії з виписки
+	// TransferDirection is "out" when money leaves the statement account and
+	// "in" when it returns from the savings account.
+	TransferDirection string
+	RawLine           string
+	MCC               string // 🔥 Додаємо це поле
+	BankCategory      string // 🔥 Додаємо поле для текстової категорії з виписки
 }
 
 type BankStatementParser interface {

@@ -23,9 +23,10 @@ type TransactionItemInput struct {
 }
 
 type CreateTransactionInput struct {
-	AccountID       string
-	TargetAccountID string
-	CategoryID      string
+	AccountID         string
+	TargetAccountID   string
+	TransferDirection string
+	CategoryID        string
 
 	CounterpartyID   string
 	CounterpartyName string
@@ -504,6 +505,9 @@ func (s *txService) BatchCreate(inputs []CreateTransactionInput, user *models.Us
 				return 0, errors.New("target account required for imported transfer")
 			}
 			outID, inID := uuid.NewString(), uuid.NewString()
+			if input.TransferDirection == "in" {
+				input.AccountID, input.TargetAccountID = input.TargetAccountID, input.AccountID
+			}
 			txs = append(txs,
 				models.Transaction{Base: models.Base{ID: outID, CreatedAt: now, UpdatedAt: now, IsSynced: true}, FamilyID: user.FamilyID, AccountID: input.AccountID, UserID: user.ID, Amount: abs(input.Amount), Date: input.Date, Note: input.Note, Type: "transfer_out", TransferRelatedID: &inID},
 				models.Transaction{Base: models.Base{ID: inID, CreatedAt: now, UpdatedAt: now, IsSynced: true}, FamilyID: user.FamilyID, AccountID: input.TargetAccountID, UserID: user.ID, Amount: abs(input.Amount), Date: input.Date, Note: input.Note, Type: "transfer_in", TransferRelatedID: &outID},

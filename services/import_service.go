@@ -33,6 +33,7 @@ type PreviewTransaction struct {
 	CounterpartyName     string              `json:"counterparty_name"`
 	CounterpartyID       string              `json:"counterparty_id"`
 	Type                 string              `json:"type"`
+	TransferDirection    string              `json:"transfer_direction"`
 	PredictedCategory    string              `json:"predicted_category"`
 	IsDuplicate          bool                `json:"is_duplicate"`
 	IsPotentialDuplicate bool                `json:"is_potential_duplicate"`
@@ -97,7 +98,7 @@ func (s *importService) ProcessFile(file *multipart.FileHeader, accountID string
 		}
 
 		existingTx, isExact, isPotential, reason := s.checkMatchStatus(accountID, pt)
-		
+
 		// 1. Отримуємо чисте ім'я через твій клінер
 		normalizedName := utils.NormalizeCounterparty(pt.Description)
 
@@ -120,6 +121,7 @@ func (s *importService) ProcessFile(file *multipart.FileHeader, accountID string
 			CounterpartyName:     finalName,
 			CounterpartyID:       foundCounterpartyID,
 			Type:                 pt.Type,
+			TransferDirection:    pt.TransferDirection,
 			PredictedCategory:    predictedCatID,
 			IsDuplicate:          isExact,
 			IsPotentialDuplicate: isPotential,

@@ -88,7 +88,7 @@ func parsePrivatBankPDF(reader io.Reader, size int64) ([]ParsedTransaction, erro
 			if strings.Contains(line, "******") {
 				continue
 			}
-			
+
 			currentTx.Description += " " + line
 			currentTx.RawLine += " " + line
 
@@ -123,8 +123,12 @@ func finalizePrivatTransaction(tx *ParsedTransaction, cleaner *regexp.Regexp) {
 	lowerDesc := strings.ToLower(tx.Description)
 	if strings.Contains(lowerDesc, "скарбничк") {
 		tx.Type = "transfer"
+		tx.TransferDirection = "in"
+		if tx.Amount < 0 {
+			tx.TransferDirection = "out"
+		}
 		tx.CounterpartyName = "Скарбничка"
-		
+
 		if strings.Contains(lowerDesc, "округлення") {
 			tx.Description = "Округлення залишку"
 		} else if strings.Contains(lowerDesc, "відсотк") {
@@ -132,12 +136,12 @@ func finalizePrivatTransaction(tx *ParsedTransaction, cleaner *regexp.Regexp) {
 		} else {
 			tx.Description = "Поповнення"
 		}
-		return 
+		return
 	}
 
 	rawName := ""
 	if tx.Type == "income" && strings.Contains(lowerDesc, "переказ") {
-		rawName = tx.Description 
+		rawName = tx.Description
 	} else {
 		parts := strings.Split(tx.Description, ",")
 		if len(parts) > 0 {
@@ -148,7 +152,7 @@ func finalizePrivatTransaction(tx *ParsedTransaction, cleaner *regexp.Regexp) {
 	}
 
 	tx.CounterpartyName = utils.NormalizeCounterparty(rawName)
-	
+
 	if tx.CounterpartyName == "" {
 		if len(rawName) > 50 {
 			tx.CounterpartyName = "Операція"
@@ -161,7 +165,7 @@ func finalizePrivatTransaction(tx *ParsedTransaction, cleaner *regexp.Regexp) {
 	tx.Description = cardMaskRegex.ReplaceAllString(tx.Description, "")
 
 	tx.Description = cleaner.ReplaceAllString(tx.Description, "")
-	
+
 	tailDigitsRegex := regexp.MustCompile(`\s+-?[\d\s]+([,\.]\d{2})?$`)
 	for {
 		newDesc := tailDigitsRegex.ReplaceAllString(tx.Description, "")
