@@ -64,6 +64,31 @@ type AccountService interface {
 	Update(id string, input CreateAccountInput, user *models.User) (*models.Account, error)
 	Delete(id string, user *models.User) error
 	UpdateMobileOrder(accountIDs []string, user *models.User) error
+	SetRoundUpTarget(id string, targetAccountID *string, user *models.User) (*models.Account, error)
+}
+
+func (s *accountService) SetRoundUpTarget(id string, targetAccountID *string, user *models.User) (*models.Account, error) {
+	account, err := s.GetByID(id, user)
+	if err != nil {
+		return nil, err
+	}
+	if targetAccountID != nil && *targetAccountID != "" {
+		target, err := s.GetByID(*targetAccountID, user)
+		if err != nil {
+			return nil, errors.New("savings account not found")
+		}
+		if target.ID == account.ID || target.Type != "piggy_bank" || target.Currency != account.Currency {
+			return nil, errors.New("round-up target must be a savings account in the same currency")
+		}
+		account.RoundUpTargetAccountID = targetAccountID
+	} else {
+		account.RoundUpTargetAccountID = nil
+	}
+	account.UpdatedAt = time.Now().UnixMilli()
+	if err := s.repo.Update(account); err != nil {
+		return nil, err
+	}
+	return account, nil
 }
 
 type accountService struct {

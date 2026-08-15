@@ -37,6 +37,9 @@ type AccountInputJSON struct {
 type UpdateMobileAccountOrderJSON struct {
 	AccountIDs []string `json:"account_ids" binding:"required"`
 }
+type RoundUpTargetJSON struct {
+	TargetAccountID *string `json:"target_account_id"`
+}
 
 // Create godoc
 // @Summary Create a new account
@@ -202,6 +205,25 @@ func (h *AccountController) Update(c *gin.Context) {
 		return
 	}
 
+	c.JSON(http.StatusOK, account)
+}
+
+func (h *AccountController) SetRoundUpTarget(c *gin.Context) {
+	currentUser, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	var input RoundUpTargetJSON
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	account, err := h.service.SetRoundUpTarget(c.Param("id"), input.TargetAccountID, currentUser.(*models.User))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, account)
 }
 

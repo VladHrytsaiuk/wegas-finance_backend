@@ -31,6 +31,86 @@ var DataMigrations = []DataMigration{
 		ID: "20260730_link_existing_catalog_templates_v3",
 		Up: linkExistingCatalogTemplates,
 	},
+	{
+		ID: "20260814_backfill_batch_import_account_balances",
+		Up: backfillBatchImportAccountBalances,
+	},
+	{ID: "20260815_correct_legacy_round_up_transfers", Up: correctLegacyRoundUpTransfers},
+}
+
+// correctLegacyRoundUpTransfers fixes the old importer which represented an
+// outgoing round-up as a one-sided `transfer` and therefore added it to the card.
+func correctLegacyRoundUpTransfers(tx *gorm.DB) error {
+	type row struct {
+		AccountID string
+		Amount    int64
+	}
+	var rows []row
+	if err := tx.Raw(`SELECT account_id, amount FROM transactions WHERE deleted_at IS NULL AND type = 'transfer' AND transfer_related_id IS NULL AND note = 'Округлення залишку'`).Scan(&rows).Error; err != nil {
+		return err
+	}
+	for _, item := range rows {
+		// The prior migration added +amount; the correct source-card effect is -amount.
+		if err := tx.Model(&models.Account{}).Where("id = ?", item.AccountID).Update("balance", gorm.Expr("balance - ?", item.Amount*2)).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// backfillBatchImportAccountBalances repairs rows written by the legacy batch
+// importer. That path inserted transactions without their account currency and
+// without changing the account's cached balance.
+func backfillBatchImportAccountBalances(tx *gorm.DB) error {
+	type legacyTransaction struct {
+		ID              string
+		AccountID       string
+		AccountCurrency string
+		Amount          int64
+		Type            string
+		IsForgiveness   bool
+	}
+
+	var transactions []legacyTransaction
+	if err := tx.Raw(`
+		SELECT t.id, t.account_id, a.currency AS account_currency, t.amount, t.type, t.is_forgiveness
+		FROM transactions t
+		JOIN accounts a ON a.id = t.account_id
+		WHERE t.deleted_at IS NULL AND (t.currency IS NULL OR t.currency = '')
+	`).Scan(&transactions).Error; err != nil {
+		return err
+	}
+
+	balanceChanges := make(map[string]int64)
+	for _, transaction := range transactions {
+		if err := tx.Model(&models.Transaction{}).Where("id = ?", transaction.ID).
+			Update("currency", transaction.AccountCurrency).Error; err != nil {
+			return err
+		}
+		if !transaction.IsForgiveness {
+			balanceChanges[transaction.AccountID] += transactionBalanceDelta(transaction.Type, transaction.Amount)
+		}
+	}
+
+	for accountID, change := range balanceChanges {
+		if change == 0 {
+			continue
+		}
+		if err := tx.Model(&models.Account{}).Where("id = ?", accountID).
+			Update("balance", gorm.Expr("balance + ?", change)).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func transactionBalanceDelta(transactionType string, amount int64) int64 {
+	switch transactionType {
+	case "expense", "loan_give", "debt_repay", "transfer_out":
+		return -amount
+	default:
+		return amount
+	}
 }
 
 // linkExistingCatalogTemplates backfills the relationship for families that

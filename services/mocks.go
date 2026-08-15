@@ -55,6 +55,14 @@ func (m *MockAccountService) UpdateMobileOrder(accountIDs []string, user *models
 	return args.Error(0)
 }
 
+func (m *MockAccountService) SetRoundUpTarget(id string, targetAccountID *string, user *models.User) (*models.Account, error) {
+	args := m.Called(id, targetAccountID, user)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Account), args.Error(1)
+}
+
 // MockAssetRepository
 type MockAssetRepository struct {
 	mock.Mock

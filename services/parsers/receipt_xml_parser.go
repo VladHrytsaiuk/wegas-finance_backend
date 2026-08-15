@@ -7,6 +7,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	// Embed IANA timezone data in Windows builds, where Europe/Kyiv may not be
+	// available from the host OS or a Go installation.
+	_ "time/tzdata"
 	"unicode/utf8"
 
 	"golang.org/x/text/encoding/charmap"

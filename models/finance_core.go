@@ -29,6 +29,9 @@ type Account struct {
 	Currency      string   `json:"currency"`
 	BankName      string   `json:"bank_name"`
 	CardType      string   `json:"card_type"` // Credit/Debit
+	// RoundUpTargetAccountID remembers which savings account receives automatic
+	// round-up transfers imported from this card's bank statement.
+	RoundUpTargetAccountID *string `json:"round_up_target_account_id" gorm:"index;default:null"`
 
 	// Баланси
 	InitialBalance int64 `json:"initial_balance"`
