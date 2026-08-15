@@ -21,32 +21,32 @@ type UnlinkReceiptSourceJSON struct {
 	ReceiptSourceID string `json:"receipt_source_id" binding:"required"`
 }
 type CreateTxJSON struct {
-  AccountID       string `json:"account_id" binding:"required"`
-  TargetAccountID string `json:"target_account_id"`
-  CategoryID      string `json:"category_id"`
-  CounterpartyID  string `json:"counterparty_id"`
+	AccountID       string `json:"account_id" binding:"required"`
+	TargetAccountID string `json:"target_account_id"`
+	CategoryID      string `json:"category_id"`
+	CounterpartyID  string `json:"counterparty_id"`
 
-  Amount int64 `json:"amount" binding:"required"`
+	Amount int64 `json:"amount" binding:"required"`
 
-  // 🔥 Поле для трансферів
-  TargetAmount *int64 `json:"target_amount"`
+	// 🔥 Поле для трансферів
+	TargetAmount *int64 `json:"target_amount"`
 
-  Date int64  `json:"date" binding:"required"`
-  Note string `json:"note"`
-  Type string `json:"type" binding:"required"`
+	Date int64  `json:"date" binding:"required"`
+	Note string `json:"note"`
+	Type string `json:"type" binding:"required"`
 
-  // 🔥 НОВЕ ПОЛЕ: Прощення боргу
-  IsForgiveness bool `json:"is_forgiveness"`
+	// 🔥 НОВЕ ПОЛЕ: Прощення боргу
+	IsForgiveness bool `json:"is_forgiveness"`
 
-  Items  []TxItemJSON `json:"items"`
-  TagIDs []string     `json:"tag_ids"`
+	Items  []TxItemJSON `json:"items"`
+	TagIDs []string     `json:"tag_ids"`
 
-  AssetID *string `json:"asset_id"`
-  
-  // 🔥🔥🔥 ДОДАНО: Без цього поля контролер ігнорував пробіг!
-  Mileage *int    `json:"mileage"` 
+	AssetID *string `json:"asset_id"`
 
-  NewAsset *models.CreateAssetOnFlyInput `json:"new_asset"`
+	// 🔥🔥🔥 ДОДАНО: Без цього поля контролер ігнорував пробіг!
+	Mileage *int `json:"mileage"`
+
+	NewAsset *models.CreateAssetOnFlyInput `json:"new_asset"`
 }
 
 type TxItemJSON struct {
@@ -298,62 +298,62 @@ func (h *TransactionController) UnlinkReceiptSource(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal server error"
 // @Router /transactions [get]
 func (h *TransactionController) GetAll(c *gin.Context) {
-    currentUser, exists := c.Get("user")
-    if !exists {
-        c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-        return
-    }
-    user := currentUser.(*models.User)
+	currentUser, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	user := currentUser.(*models.User)
 
-    // Вручну беремо параметри з сирого запиту, щоб уникнути проблем Gin
-    queryParams := c.Request.URL.Query()
+	// Вручну беремо параметри з сирого запиту, щоб уникнути проблем Gin
+	queryParams := c.Request.URL.Query()
 
-    filter := repositories.TransactionFilter{
-        FamilyID:        user.FamilyID,
-        // Спробуємо взяти і з [] і без них
-        AccountIDs:      append(queryParams["account_id"], queryParams["account_id[]"]...),
-        CategoryIDs:     append(queryParams["category_id"], queryParams["category_id[]"]...),
-        CounterpartyIDs: append(queryParams["counterparty_id"], queryParams["counterparty_id[]"]...),
-        Type:            c.Query("type"),
-        Search:          c.Query("search"),
-        Sort:            c.Query("sort"),
-        AssetID:         c.Query("asset_id"),
-    }
+	filter := repositories.TransactionFilter{
+		FamilyID: user.FamilyID,
+		// Спробуємо взяти і з [] і без них
+		AccountIDs:      append(queryParams["account_id"], queryParams["account_id[]"]...),
+		CategoryIDs:     append(queryParams["category_id"], queryParams["category_id[]"]...),
+		CounterpartyIDs: append(queryParams["counterparty_id"], queryParams["counterparty_id[]"]...),
+		Type:            c.Query("type"),
+		Search:          c.Query("search"),
+		Sort:            c.Query("sort"),
+		AssetID:         c.Query("asset_id"),
+	}
 
-    // Парсинг пагінації
-    page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-    limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
-    filter.Limit = limit
-    filter.Offset = (page - 1) * limit
+	// Парсинг пагінації
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	filter.Limit = limit
+	filter.Offset = (page - 1) * limit
 
-    // Парсинг дат
-    if dateFrom, err := strconv.ParseInt(c.Query("date_from"), 10, 64); err == nil {
-        filter.DateFrom = dateFrom
-    }
-    if dateTo, err := strconv.ParseInt(c.Query("date_to"), 10, 64); err == nil {
-        filter.DateTo = dateTo
-    }
+	// Парсинг дат
+	if dateFrom, err := strconv.ParseInt(c.Query("date_from"), 10, 64); err == nil {
+		filter.DateFrom = dateFrom
+	}
+	if dateTo, err := strconv.ParseInt(c.Query("date_to"), 10, 64); err == nil {
+		filter.DateTo = dateTo
+	}
 
-    // Парсинг сум
-    if minAmt, err := strconv.ParseInt(c.Query("min_amount"), 10, 64); err == nil {
-        filter.MinAmount = &minAmt
-    }
-    if maxAmt, err := strconv.ParseInt(c.Query("max_amount"), 10, 64); err == nil {
-        filter.MaxAmount = &maxAmt
-    }
+	// Парсинг сум
+	if minAmt, err := strconv.ParseInt(c.Query("min_amount"), 10, 64); err == nil {
+		filter.MinAmount = &minAmt
+	}
+	if maxAmt, err := strconv.ParseInt(c.Query("max_amount"), 10, 64); err == nil {
+		filter.MaxAmount = &maxAmt
+	}
 
-    txs, count, err := h.service.GetAll(filter, user)
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-        return
-    }
+	txs, count, err := h.service.GetAll(filter, user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
-    c.JSON(http.StatusOK, gin.H{
-        "data":  txs,
-        "count": count,
-        "page":  page,
-        "limit": limit,
-    })
+	c.JSON(http.StatusOK, gin.H{
+		"data":  txs,
+		"count": count,
+		"page":  page,
+		"limit": limit,
+	})
 }
 
 // GetOne godoc
@@ -460,13 +460,13 @@ func (h *TransactionController) Update(c *gin.Context) {
 		CounterpartyID:  jsonInput.CounterpartyID,
 		Amount:          jsonInput.Amount,
 		// TargetAmount:    jsonInput.TargetAmount, // Update для переказу - це складно, поки не чіпаємо
-		Date:     jsonInput.Date,
-		Note:     jsonInput.Note,
-		Type:     jsonInput.Type,
-		Items:    itemsInput,
-		TagIDs:   jsonInput.TagIDs,
-		AssetID:  jsonInput.AssetID,
-		Mileage:         jsonInput.Mileage,
+		Date:    jsonInput.Date,
+		Note:    jsonInput.Note,
+		Type:    jsonInput.Type,
+		Items:   itemsInput,
+		TagIDs:  jsonInput.TagIDs,
+		AssetID: jsonInput.AssetID,
+		Mileage: jsonInput.Mileage,
 
 		// 🔥 ПЕРЕДАЄМО ПРАПОРЕЦЬ ПРИ ОНОВЛЕННІ (Якщо раптом захочете змінити)
 		IsForgiveness: jsonInput.IsForgiveness,
@@ -649,5 +649,3 @@ func (h *TransactionController) PredictCategory(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"category_id": categoryID})
 	}
 }
-
-

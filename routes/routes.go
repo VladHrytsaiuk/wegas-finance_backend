@@ -170,6 +170,7 @@ func SetupRoutes(r *gin.Engine, c AppControllers, cfg *config.Config) {
 			protected.GET("/accounts", c.Account.GetAll)
 			protected.PUT("/accounts/mobile-order", c.Account.UpdateMobileOrder)
 			protected.GET("/accounts/:id", c.Account.GetOne)
+			protected.PATCH("/accounts/:id/round-up-target", c.Account.SetRoundUpTarget)
 			protected.PUT("/accounts/:id", c.Account.Update)
 			protected.DELETE("/accounts/:id", c.Account.Delete)
 

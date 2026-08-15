@@ -20,7 +20,6 @@ type TransactionItemInput struct {
 	PricePerUnit int64   `json:"price_per_unit"`
 	TotalAmount  int64   `json:"total_amount"`
 	CategoryID   *string `json:"category_id"`
-	
 }
 
 type CreateTransactionInput struct {
@@ -44,7 +43,7 @@ type CreateTransactionInput struct {
 	AssetID *string
 	// 🔥 ПОСИЛАННЯ НА MODELS
 	NewAsset      *models.CreateAssetOnFlyInput
-	Mileage *int `json:"mileage"`
+	Mileage       *int `json:"mileage"`
 	IsForgiveness bool
 	ExternalID    string
 }
@@ -195,9 +194,9 @@ func (s *txService) Create(input CreateTransactionInput, files []*multipart.File
 		Type:           input.Type,
 		AssetID:        input.AssetID,
 		// 🔥 Зберігаємо пробіг в транзакцію
-		Mileage:        input.Mileage, 
-		Photos:         []models.TransactionPhoto{},
-		IsForgiveness:  input.IsForgiveness,
+		Mileage:       input.Mileage,
+		Photos:        []models.TransactionPhoto{},
+		IsForgiveness: input.IsForgiveness,
 	}
 
 	if newAsset == nil && len(files) > 0 {
@@ -236,7 +235,7 @@ func (s *txService) Create(input CreateTransactionInput, files []*multipart.File
 
 	// --- 🚗 ЛОГІКА ОНОВЛЕННЯ АКТИВУ (RATCHET MECHANISM) ---
 	if input.AssetID != nil && *input.AssetID != "" {
-		
+
 		newMileage := 0
 		if input.Mileage != nil {
 			newMileage = *input.Mileage
@@ -279,9 +278,9 @@ func (s *txService) Update(id string, input CreateTransactionInput, user *models
 		ReceiptImg:     oldTx.ReceiptImg,
 		AssetID:        input.AssetID,
 		IsForgiveness:  input.IsForgiveness,
-		
+
 		// 🔥 Не забуваємо оновлювати пробіг в самій транзакції
-		Mileage:        input.Mileage, 
+		Mileage: input.Mileage,
 	}
 
 	var items []models.TransactionItem
@@ -303,7 +302,7 @@ func (s *txService) Update(id string, input CreateTransactionInput, user *models
 
 	// --- 🚗 ЛОГІКА ОНОВЛЕННЯ АКТИВУ (RATCHET MECHANISM) ---
 	if input.AssetID != nil && *input.AssetID != "" {
-		
+
 		newMileage := 0
 		if input.Mileage != nil {
 			newMileage = *input.Mileage
@@ -500,6 +499,17 @@ func (s *txService) BatchCreate(inputs []CreateTransactionInput, user *models.Us
 	cpCache := make(map[string]string)
 
 	for _, input := range inputs {
+		if input.Type == "transfer" {
+			if input.TargetAccountID == "" {
+				return 0, errors.New("target account required for imported transfer")
+			}
+			outID, inID := uuid.NewString(), uuid.NewString()
+			txs = append(txs,
+				models.Transaction{Base: models.Base{ID: outID, CreatedAt: now, UpdatedAt: now, IsSynced: true}, FamilyID: user.FamilyID, AccountID: input.AccountID, UserID: user.ID, Amount: abs(input.Amount), Date: input.Date, Note: input.Note, Type: "transfer_out", TransferRelatedID: &inID},
+				models.Transaction{Base: models.Base{ID: inID, CreatedAt: now, UpdatedAt: now, IsSynced: true}, FamilyID: user.FamilyID, AccountID: input.TargetAccountID, UserID: user.ID, Amount: abs(input.Amount), Date: input.Date, Note: input.Note, Type: "transfer_in", TransferRelatedID: &outID},
+			)
+			continue
+		}
 		txID := uuid.NewString()
 		finalCounterpartyID := input.CounterpartyID
 		if finalCounterpartyID == "" && input.CounterpartyName != "" {

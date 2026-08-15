@@ -90,7 +90,7 @@ func TestTransactionRepo_Integration(t *testing.T) {
 
 		// Verify ServerVersion updated
 		assert.True(t, tx.ServerVersion > 0)
-		
+
 		// Verify counterparty balance
 		var cpBalance models.CounterpartyBalance
 		db.First(&cpBalance, "counterparty_id = ? AND currency = ?", counterparty.ID, "UAH")
@@ -153,10 +153,10 @@ func TestTransactionRepo_Integration(t *testing.T) {
 		txUpdate := *tx
 		oldVersion := tx.ServerVersion
 		txUpdate.Amount = 150
-		
+
 		// Wait a bit to ensure UnixNano changes
 		time.Sleep(2 * time.Millisecond)
-		
+
 		err = repo.Update(tx.ID, family.ID, &txUpdate, nil, nil)
 		assert.NoError(t, err)
 
@@ -258,20 +258,28 @@ func TestTransactionRepo_Integration(t *testing.T) {
 		// Use the first tx we created
 		var someTx models.Transaction
 		db.First(&someTx)
-		
+
 		res, err := repo.GetByID(someTx.ID, family.ID)
 		assert.NoError(t, err)
 		assert.Equal(t, someTx.ID, res.ID)
 	})
 
 	t.Run("TestBatchCreate", func(t *testing.T) {
+		var before models.Account
+		db.First(&before, "id = ?", account1.ID)
 		txs := []models.Transaction{
-			{Base: models.Base{ID: uuid.NewString()}, FamilyID: family.ID, UserID: user.ID, Amount: 10, Type: "expense", Currency: "UAH"},
-			{Base: models.Base{ID: uuid.NewString()}, FamilyID: family.ID, UserID: user.ID, Amount: 20, Type: "expense", Currency: "UAH"},
+			{Base: models.Base{ID: uuid.NewString()}, FamilyID: family.ID, UserID: user.ID, AccountID: account1.ID, Amount: 10, Type: "expense"},
+			{Base: models.Base{ID: uuid.NewString()}, FamilyID: family.ID, UserID: user.ID, AccountID: account1.ID, Amount: 20, Type: "income"},
 		}
 		count, err := repo.BatchCreate(txs)
 		assert.NoError(t, err)
 		assert.Equal(t, 2, count)
+		assert.Equal(t, "UAH", txs[0].Currency)
+		assert.Equal(t, "UAH", txs[1].Currency)
+
+		var after models.Account
+		db.First(&after, "id = ?", account1.ID)
+		assert.Equal(t, before.Balance+10, after.Balance)
 	})
 
 	t.Run("TestGetPredictedCategory", func(t *testing.T) {
@@ -287,7 +295,7 @@ func TestTransactionRepo_Integration(t *testing.T) {
 		db.Create(&tx)
 		db.Create(&models.TransactionItem{Base: models.Base{ID: uuid.NewString()}, TransactionID: tx1ID, Name: "Milk", CategoryID: &cat1.ID})
 		db.Create(&models.TransactionItem{Base: models.Base{ID: uuid.NewString()}, TransactionID: tx1ID, Name: "Bread", CategoryID: &cat1.ID})
-		
+
 		tx2ID := uuid.NewString()
 		tx2 := models.Transaction{Base: models.Base{ID: tx2ID}, FamilyID: family.ID, UserID: user.ID, Date: now}
 		db.Create(&tx2)
@@ -306,13 +314,13 @@ func TestTransactionRepo_Integration(t *testing.T) {
 	t.Run("TestSearchTransactionsCyrillic", func(t *testing.T) {
 		note := "Оренда квартири " + uuid.NewString()
 		tx := &models.Transaction{
-			Base:      models.Base{ID: uuid.NewString()},
-			FamilyID:  family.ID,
-			UserID:    user.ID,
-			Note:      note,
-			Amount:    1000,
-			Type:      "expense",
-			Date:      time.Now().UnixMilli(),
+			Base:     models.Base{ID: uuid.NewString()},
+			FamilyID: family.ID,
+			UserID:   user.ID,
+			Note:     note,
+			Amount:   1000,
+			Type:     "expense",
+			Date:     time.Now().UnixMilli(),
 		}
 		db.Create(tx)
 

@@ -79,6 +79,7 @@ func (r *accountRepo) Update(account *models.Account) error {
 			"UserID",
 			"StorageTypeID",
 			"GoalID",
+			"RoundUpTargetAccountID",
 			"UpdatedAt",
 			"IsArchived",
 			"IsSynced", // Додано
