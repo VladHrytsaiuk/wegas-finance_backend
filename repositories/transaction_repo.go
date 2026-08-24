@@ -395,10 +395,20 @@ func (r *txRepo) Update(id string, familyID string, newData *models.Transaction,
 		if oldTx.AccountID != "" {
 			var oldAccount models.Account
 			if err := txDB.Set("gorm:query_option", "FOR UPDATE").First(&oldAccount, "id = ?", oldTx.AccountID).Error; err == nil {
-				// Якщо транзакція банківська (має ExternalID), забороняємо будь-які зміни через цей метод
-				// Банківські транзакції мають оновлюватись тільки через спеціальні механізми (напр. зміна категорії)
+				// Дані банківської транзакції надходять від провайдера, тому їх не можна
+				// перераховувати вручну. Водночас категорія та контрагент — це локальні
+				// користувацькі позначки, тож їх дозволено уточнювати.
 				if oldAccount.IsSynced && oldTx.ExternalID != "" {
-					return fmt.Errorf("🚫 Це банківська транзакція. Ручне редагування основних полів заборонено.")
+					updates := map[string]interface{}{
+						"category_id": newData.CategoryID,
+						"updated_at":  time.Now().UnixMilli(),
+					}
+					if newData.CounterpartyID == "" {
+						updates["counterparty_id"] = nil
+					} else {
+						updates["counterparty_id"] = newData.CounterpartyID
+					}
+					return txDB.Model(&oldTx).Updates(updates).Error
 				}
 			}
 		}

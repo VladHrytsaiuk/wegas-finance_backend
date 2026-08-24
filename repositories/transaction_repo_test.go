@@ -181,6 +181,72 @@ func TestTransactionRepo_Integration(t *testing.T) {
 		assert.Equal(t, int64(1050), updatedAcc.Balance)
 	})
 
+	t.Run("TestUpdateSyncedTransactionAllowsOnlyCategoryAndCounterparty", func(t *testing.T) {
+		syncedAccount := models.Account{
+			Base:     models.Base{ID: uuid.NewString(), IsSynced: true},
+			FamilyID: family.ID,
+			UserID:   user.ID,
+			Name:     "Synced account",
+			Currency: "UAH",
+			Balance:  900,
+		}
+		db.Create(&syncedAccount)
+
+		secondCategory := models.Category{
+			Base:     models.Base{ID: uuid.NewString()},
+			FamilyID: family.ID,
+			Name:     "Transport",
+			Type:     "expense",
+		}
+		db.Create(&secondCategory)
+		secondCounterparty := models.Counterparty{
+			Base:     models.Base{ID: uuid.NewString()},
+			FamilyID: family.ID,
+			Name:     "Fuel station",
+		}
+		db.Create(&secondCounterparty)
+
+		bankTx := &models.Transaction{
+			Base:           models.Base{ID: uuid.NewString()},
+			FamilyID:       family.ID,
+			UserID:         user.ID,
+			AccountID:      syncedAccount.ID,
+			CategoryID:     category.ID,
+			CounterpartyID: counterparty.ID,
+			ExternalID:     "bank-tx-1",
+			Type:           "expense",
+			Amount:         100,
+			Date:           time.Now().UnixMilli(),
+			Note:           "from bank",
+			Currency:       "UAH",
+		}
+		db.Create(bankTx)
+
+		update := *bankTx
+		update.CategoryID = secondCategory.ID
+		update.CounterpartyID = secondCounterparty.ID
+		update.Amount = 999
+		update.Date = bankTx.Date + 1000
+		update.Note = "must stay unchanged"
+		update.Type = "income"
+
+		err := repo.Update(bankTx.ID, family.ID, &update, nil, nil)
+		assert.NoError(t, err)
+
+		var saved models.Transaction
+		db.First(&saved, "id = ?", bankTx.ID)
+		assert.Equal(t, secondCategory.ID, saved.CategoryID)
+		assert.Equal(t, secondCounterparty.ID, saved.CounterpartyID)
+		assert.Equal(t, bankTx.Amount, saved.Amount)
+		assert.Equal(t, bankTx.Date, saved.Date)
+		assert.Equal(t, bankTx.Note, saved.Note)
+		assert.Equal(t, bankTx.Type, saved.Type)
+
+		var savedAccount models.Account
+		db.First(&savedAccount, "id = ?", syncedAccount.ID)
+		assert.Equal(t, int64(900), savedAccount.Balance)
+	})
+
 	t.Run("TestDeleteTransaction", func(t *testing.T) {
 		db.Model(&models.Account{}).Where("id = ?", account1.ID).Update("balance", 1000)
 		tx := &models.Transaction{
